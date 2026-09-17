@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AquaSmart – Control inteligente de tu piscina</title>
+
+<!-- AQUÍ LLAMAMOS AL ARCHIVO DE ESTILOS CSS -->
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Water background -->
+<div class="water-bg" id="water-bg">
+  <div class="wave wave-1"></div>
+  <div class="wave wave-2"></div>
+  <div class="wave wave-3"></div>
+</div>
+
+<!-- ══════ AUTH SCREEN ══════ -->
+<div id="auth-screen">
+  <div class="auth-container">
+    <div class="logo-area">
+      <div class="logo-icon">💧</div>
+      <div class="logo-name">AquaSmart</div>
+      <div class="logo-tagline">Control inteligente de agua para piscinas</div>
+    </div>
+
+    <div class="auth-card">
+      <div class="tab-row">
+        <button class="tab-btn active" onclick="switchTab('login')">Iniciar sesión</button>
+        <button class="tab-btn" onclick="switchTab('register')">Registrarse</button>
+      </div>
+
+      <!-- LOGIN FORM -->
+      <div id="login-form">
+        <div class="form-group">
+          <label class="form-label">Correo electrónico</label>
+          <input type="email" class="form-input" id="login-email" placeholder="usuario@email.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Contraseña</label>
+          <input type="password" class="form-input" id="login-pass" placeholder="••••••••">
+        </div>
+        <button class="btn-primary" onclick="doLogin()">Ingresar al sistema</button>
+        <div class="error-msg" id="login-error">Correo o contraseña incorrectos.</div>
+        <div class="demo-hint">Demo: <span>demo@aquasmart.com</span> / <span>aqua1234</span></div>
+      </div>
+
+      <!-- REGISTER FORM -->
+      <div id="register-form" style="display:none">
+        <div class="form-group">
+          <label class="form-label">Nombre completo</label>
+          <input type="text" class="form-input" id="reg-name" placeholder="Tu nombre">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Correo electrónico</label>
+          <input type="email" class="form-input" id="reg-email" placeholder="usuario@email.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Contraseña</label>
+          <input type="password" class="form-input" id="reg-pass" placeholder="Mín. 6 caracteres">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Confirmar contraseña</label>
+          <input type="password" class="form-input" id="reg-pass2" placeholder="••••••••">
+        </div>
+        <button class="btn-primary" onclick="doRegister()">Crear cuenta</button>
+        <div class="error-msg" id="register-error"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ APP SCREEN ══════ -->
+<div id="app-screen">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-icon">💧</div>
+      <div class="sidebar-logo-text">AquaSmart</div>
+    </div>
+
+    <div class="nav-section-label">Principal</div>
+    <div class="nav-item active" onclick="showSection('dashboard')">
+      <span class="icon">📊</span><span>Dashboard</span>
+    </div>
+    <div class="nav-item" onclick="showSection('piscina')">
+      <span class="icon">🏊</span><span>Mi Piscina</span>
+    </div>
+    <div class="nav-item" onclick="showSection('historial')">
+      <span class="icon">📈</span><span>Historial</span>
+    </div>
+    <div class="nav-item" onclick="showSection('alertas')">
+      <span class="icon">🔔</span><span>Alertas</span>
+    </div>
+
+    <div class="nav-section-label" style="margin-top:20px">Sistema</div>
+    <div class="nav-item" onclick="showSection('esp32')">
+      <span class="icon">⚡</span><span>ESP32 / IoT</span>
+    </div>
+    <div class="nav-item" onclick="showSection('ia')">
+      <span class="icon">🤖</span><span>IA & Reportes</span>
+    </div>
+
+    <div class="sidebar-bottom">
+      <div class="user-chip">
+        <div class="user-avatar" id="sidebar-avatar">S</div>
+        <div class="user-info">
+          <div class="user-name" id="sidebar-name">Simón</div>
+          <div class="user-email" id="sidebar-email">demo@aquasmart.com</div>
+        </div>
+      </div>
+      <button class="logout-btn" onclick="doLogout()">Cerrar sesión</button>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <main class="main-content">
+
+    <!-- DASHBOARD -->
+    <div id="section-dashboard">
+      <div class="topbar">
+        <div>
+          <div class="page-title">Panel de control</div>
+          <div class="page-subtitle">Monitoreo en tiempo real · Última actualización: ahora</div>
+        </div>
+        <div class="status-pill">
+          <div class="status-dot"></div>
+          ESP32 conectado
+        </div>
+      </div>
+
+      <!-- Metric cards -->
+      <div class="cards-grid">
+        <div class="metric-card ok">
+          <div class="metric-label">🧪 pH del agua</div>
+          <div class="metric-value" id="card-ph" style="color:#22D3A3">7.3</div>
+          <div class="ph-bar-wrap">
+            <div class="ph-bar-track">
+              <div class="ph-bar-marker" id="ph-marker" style="left:40%"></div>
+            </div>
+            <div class="ph-labels"><span>0</span><span>7</span><span>14</span></div>
+          </div>
+          <div class="metric-status ok" id="ph-status">✓ Nivel óptimo (6.8–7.6)</div>
+        </div>
+
+        <div class="metric-card info">
+          <div class="metric-label">🌡️ Temperatura</div>
+          <div class="metric-value" style="color:var(--aqua)">
+            <span id="card-temp">24</span><span class="metric-unit">°C</span>
+          </div>
+          <div class="metric-status ok">✓ Confortable (22–28°C)</div>
+        </div>
+
+        <div class="metric-card warn">
+          <div class="metric-label">🧴 Nivel de cloro (est.)</div>
+          <div class="metric-value" style="color:var(--yellow-warn)">
+            <span id="card-cl">1.4</span><span class="metric-unit"> ppm</span>
+          </div>
+          <div class="metric-status warn">⚠ Bajo — revisar dosificación</div>
+        </div>
+
+        <div class="metric-card ok">
+          <div class="metric-label">💧 Volumen piscina</div>
+          <div class="metric-value" style="color:var(--aqua)">
+            <span id="card-vol">45</span><span class="metric-unit"> m³</span>
+          </div>
+          <div class="metric-status ok">✓ Calculado automáticamente</div>
+        </div>
+      </div>
+
+      <!-- Charts + alerts -->
+      <div class="charts-row">
+        <div class="chart-card">
+          <div class="chart-title">Evolución del pH — últimas 24 h</div>
+          <div class="chart-subtitle">Rango óptimo: 6.8 – 7.6</div>
+          <div class="mini-chart">
+            <svg class="chart-svg" id="ph-chart" viewBox="0 0 500 120" preserveAspectRatio="none"></svg>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-title">Dosificaciones hoy</div>
+          <div class="chart-subtitle">Activaciones automáticas</div>
+          <div style="margin-top:16px">
+            <div style="margin-bottom:14px">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+                <span style="color:var(--text-secondary)">Ácido (pH↓)</span>
+                <span style="color:var(--text-primary);font-weight:600">3 veces</span>
+              </div>
+              <div class="dosage-progress"><div class="dosage-fill" style="width:60%;background:var(--red-alert)"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+                <span style="color:var(--text-secondary)">Base (pH↑)</span>
+                <span style="color:var(--text-primary);font-weight:600">1 vez</span>
+              </div>
+              <div class="dosage-progress"><div class="dosage-fill" style="width:20%;background:var(--green-ok)"></div></div>
+            </div>
+            <div style="margin-top:16px;padding:12px;background:rgba(0,200,224,0.06);border:1px solid rgba(0,200,224,0.15);border-radius:10px">
+              <div style="font-size:11px;color:var(--text-secondary);margin-bottom:3px">Próxima dosificación</div>
+              <div style="font-size:20px;font-weight:700;color:var(--aqua);font-family:'Space Grotesk',sans-serif">14:30 hs</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alerts -->
+      <div class="alerts-card">
+        <div class="chart-title" style="margin-bottom:16px">Actividad reciente</div>
+        <div class="alert-item">
+          <div class="alert-dot warn"></div>
+          <div>
+            <div class="alert-text">Nivel de cloro estimado por debajo del rango (1.4 ppm)</div>
+            <div class="alert-time">Hace 12 minutos</div>
+          </div>
+        </div>
+        <div class="alert-item">
+          <div class="alert-dot ok"></div>
+          <div>
+            <div class="alert-text">Dosificación automática de ácido completada — pH corregido a 7.3</div>
+            <div class="alert-time">Hace 1 hora y 8 minutos</div>
+          </div>
+        </div>
+        <div class="alert-item">
+          <div class="alert-dot ok"></div>
+          <div>
+            <div class="alert-text">Sistema AquaSmart iniciado correctamente · ESP32 en línea</div>
+            <div class="alert-time">Hoy a las 08:00 hs</div>
+          </div>
+        </div>
+        <div class="alert-item">
+          <div class="alert-dot alert"></div>
+          <div>
+            <div class="alert-text">pH detectado en 8.1 (alto) — bomba ácido activada</div>
+            <div class="alert-time">Ayer a las 21:42 hs</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MI PISCINA -->
+    <div id="section-piscina" style="display:none">
+      <div class="topbar">
+        <div>
+          <div class="page-title">Mi Piscina</div>
+          <div class="page-subtitle">Configuración y cálculo de volumen</div>
+        </div>
+      </div>
+      <div class="pool-panel">
+        <div class="chart-title">Dimensiones de la piscina</div>
+        <div class="chart-subtitle" style="font-size:12px;color:var(--text-secondary);margin-top:4px">Ingresá las medidas para calcular el volumen automáticamente</div>
+        <div class="pool-input-row">
+          <div class="pool-input-group">
+            <div class="pool-input-label">Largo (m)</div>
+            <input type="number" class="pool-input" id="pool-largo" value="10" oninput="calcVol()">
+          </div>
+          <div class="pool-input-group">
+            <div class="pool-input-label">Ancho (m)</div>
+            <input type="number" class="pool-input" id="pool-ancho" value="5" oninput="calcVol()">
+          </div>
+          <div class="pool-input-group">
+            <div class="pool-input-label">Prof. promedio (m)</div>
+            <input type="number" class="pool-input" id="pool-prof" value="1.5" step="0.1" oninput="calcVol()">
+          </div>
+        </div>
+        <div class="pool-volume" id="pool-volume-text">
+          💧 Volumen estimado: <strong>75 m³</strong> · Equivalente a 75,000 litros de agua
+        </div>
+      </div>
+      <div class="pool-panel">
+        <div class="chart-title">Dosificación recomendada</div>
+        <div class="chart-subtitle" style="font-size:12px;color:var(--text-secondary);margin-top:4px">Basada en el volumen y el pH actual (7.3)</div>
+        <div class="dosage-row">
+          <div class="dosage-item">
+            <div class="dosage-name">ÁCIDO MURIÁTICO (pH bajo)</div>
+            <div class="dosage-val" style="color:var(--red-alert)">0 <span class="dosage-unit">ml</span></div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">pH actual en rango — sin necesidad</div>
+            <div class="dosage-progress"><div class="dosage-fill" style="width:0%;background:var(--red-alert)"></div></div>
+          </div>
+          <div class="dosage-item">
+            <div class="dosage-name">BICARBONATO (pH alto)</div>
+            <div class="dosage-val" style="color:var(--green-ok)">0 <span class="dosage-unit">g</span></div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">pH actual en rango — sin necesidad</div>
+            <div class="dosage-progress"><div class="dosage-fill" style="width:0%;background:var(--green-ok)"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HISTORIAL -->
+    <div id="section-historial" style="display:none">
+      <div class="topbar">
+        <div>
+          <div class="page-title">Historial</div>
+          <div class="page-subtitle">Registro de mediciones y dosificaciones</div>
+        </div>
+      </div>
+      <div class="chart-card" style="margin-bottom:16px">
+        <div class="chart-title">pH — últimos 7 días</div>
+        <div class="chart-subtitle">Rangos óptimos marcados en verde</div>
+        <div class="mini-chart" style="height:160px">
+          <svg id="ph-chart-7d" viewBox="0 0 600 160" preserveAspectRatio="none" style="width:100%;height:100%"></svg>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title" style="margin-bottom:16px">Registro de dosificaciones</div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="color:var(--text-secondary);border-bottom:1px solid var(--border)">
+              <th style="text-align:left;padding:8px 0;font-weight:500">Fecha</th>
+              <th style="text-align:left;padding:8px 0;font-weight:500">Hora</th>
+              <th style="text-align:left;padding:8px 0;font-weight:500">pH previo</th>
+              <th style="text-align:left;padding:8px 0;font-weight:500">Acción</th>
+              <th style="text-align:left;padding:8px 0;font-weight:500">pH posterior</th>
+            </tr>
+          </thead>
+          <tbody id="historial-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ALERTAS -->
+    <div id="section-alertas" style="display:none">
+      <div class="topbar">
+        <div><div class="page-title">Alertas</div><div class="page-subtitle">Notificaciones del sistema</div></div>
+      </div>
+      <div class="alerts-card">
+        <div id="alertas-list"></div>
+      </div>
+    </div>
+
+    <!-- ESP32 -->
+    <div id="section-esp32" style="display:none">
+      <div class="topbar">
+        <div><div class="page-title">ESP32 / IoT</div><div class="page-subtitle">Estado del hardware conectado</div></div>
+      </div>
+      <div class="pool-panel">
+        <div class="chart-title">Estado de periféricos</div>
+        <div class="esp-row" style="margin-top:16px">
+          <div class="esp-chip"><div class="esp-chip-dot on"></div>ESP32 principal</div>
+          <div class="esp-chip"><div class="esp-chip-dot on"></div>Sensor pH (analog)</div>
+          <div class="esp-chip"><div class="esp-chip-dot on"></div>Sensor DS18B20</div>
+          <div class="esp-chip"><div class="esp-chip-dot on"></div>Bomba ácido</div>
+          <div class="esp-chip"><div class="esp-chip-dot on"></div>Bomba base</div>
+          <div class="esp-chip"><div class="esp-chip-dot on"></div>Wi-Fi</div>
+          <div class="esp-chip"><div class="esp-chip-dot off"></div>Sensor cloro (no disp.)</div>
+        </div>
+        <div style="margin-top:20px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+          <div style="padding:14px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px">
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">Uptime</div>
+            <div style="font-size:20px;font-weight:700;color:var(--aqua);font-family:'Space Grotesk',sans-serif">4 d 6 h</div>
+          </div>
+          <div style="padding:14px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px">
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">IP local</div>
+            <div style="font-size:16px;font-weight:600;color:var(--text-primary);font-family:'Space Grotesk',sans-serif">192.168.1.42</div>
+          </div>
+          <div style="padding:14px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px">
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">Lecturas / hora</div>
+            <div style="font-size:20px;font-weight:700;color:var(--green-ok);font-family:'Space Grotesk',sans-serif">120</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- IA -->
+    <div id="section-ia" style="display:none">
+      <div class="topbar">
+        <div><div class="page-title">IA & Reportes</div><div class="page-subtitle">Análisis inteligente del agua</div></div>
+      </div>
+      <div class="pool-panel">
+        <div class="chart-title">Reporte mensual — Mayo 2025</div>
+        <div style="margin-top:16px;display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
+          <div style="padding:16px;background:rgba(0,200,224,0.06);border:1px solid rgba(0,200,224,0.15);border-radius:12px">
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">pH promedio mensual</div>
+            <div style="font-size:28px;font-weight:700;color:var(--green-ok);font-family:'Space Grotesk',sans-serif">7.18</div>
+            <div style="font-size:11px;color:var(--green-ok);margin-top:4px">✓ Dentro del rango óptimo</div>
+          </div>
+          <div style="padding:16px;background:rgba(0,200,224,0.06);border:1px solid rgba(0,200,224,0.15);border-radius:12px">
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">Dosificaciones totales</div>
+            <div style="font-size:28px;font-weight:700;color:var(--aqua);font-family:'Space Grotesk',sans-serif">47</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">35 ácido · 12 base</div>
+          </div>
+          <div style="padding:16px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px">
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">Cloro estimado prom.</div>
+            <div style="font-size:28px;font-weight:700;color:var(--yellow-warn);font-family:'Space Grotesk',sans-serif">1.6 ppm</div>
+            <div style="font-size:11px;color:var(--yellow-warn);margin-top:4px">⚠ Ligeramente bajo</div>
+          </div>
+          <div style="padding:16px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px">
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">Temp. promedio</div>
+            <div style="font-size:28px;font-weight:700;color:var(--text-primary);font-family:'Space Grotesk',sans-serif">23.4°C</div>
+            <div style="font-size:11px;color:var(--green-ok);margin-top:4px">✓ Confortable</div>
+          </div>
+        </div>
+        <div style="margin-top:16px;padding:16px;background:rgba(0,200,224,0.04);border:1px solid rgba(0,200,224,0.15);border-radius:12px">
+          <div style="font-size:12px;font-weight:600;color:var(--aqua);margin-bottom:8px">🤖 Análisis IA</div>
+          <div style="font-size:13px;color:var(--text-secondary);line-height:1.6">
+            La piscina mantuvo condiciones estables durante mayo. Se detectaron 3 episodios de pH elevado (>8.0) relacionados con días de alta temperatura. Se recomienda incrementar la frecuencia de dosificación de cloro para el mes de junio. El sistema dosificó automáticamente en el 94% de los eventos, sin necesidad de intervención manual.
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- AQUÍ LE DECIMOS AL HTML QUE EJECUTE EL JAVASCRIPT EXTERNO -->
+  <script src="script.js"></script>
+</body>
+</html>
