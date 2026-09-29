@@ -1,4 +1,4 @@
-// ── Bubbles ──
+// ─ Bubbles ──
 (function () {
   const bg = document.getElementById('water-bg');
   if (!bg) return;
@@ -14,7 +14,7 @@
 let currentUser = null;
 let liveInterval = null;
 
-// ─ Helper fetch autenticado ──
+// ── Helper para fetch autenticado ──
 function authFetch(url, options = {}) {
   const token = localStorage.getItem('token');
   return fetch(url, {
@@ -27,7 +27,7 @@ function authFetch(url, options = {}) {
   });
 }
 
-// ── Restaurar sesión ─
+// ── Restaurar sesión al cargar ──
 window.addEventListener('DOMContentLoaded', async () => {
   const token = localStorage.getItem('token');
   const user = JSON.parse(localStorage.getItem('user') || 'null');
@@ -41,10 +41,12 @@ window.addEventListener('DOMContentLoaded', async () => {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
     }
-  } catch { /* sin conexión */ }
+  } catch {
+    /* sin conexión: no restauramos */
+  }
 });
 
-// ── Tabs ──
+// ── Tabs login/register ──
 function switchTab(t) {
   document.getElementById('login-form').style.display = t === 'login' ? '' : 'none';
   document.getElementById('register-form').style.display = t === 'register' ? '' : 'none';
@@ -62,7 +64,9 @@ async function doLogin(e) {
   const pass = document.getElementById('login-pass').value;
   const err = document.getElementById('login-error');
   const btn = document.querySelector('#login-form .btn-primary');
+  
   if (btn) { btn.textContent = 'Ingresando...'; btn.disabled = true; }
+  
   try {
     const res = await fetch('/api/login', {
       method: 'POST',
@@ -95,11 +99,23 @@ async function doRegister(e) {
   const pass = document.getElementById('reg-pass').value;
   const pass2 = document.getElementById('reg-pass2').value;
   const err = document.getElementById('register-error');
-  if (!name || !email || !pass) { err.textContent = 'Completá todos los campos.'; err.style.display = 'block'; return; }
-  if (pass.length < 6) { err.textContent = 'La contraseña debe tener al menos 6 caracteres.'; err.style.display = 'block'; return; }
-  if (pass !== pass2) { err.textContent = 'Las contraseñas no coinciden.'; err.style.display = 'block'; return; }
+  
+  if (!name || !email || !pass) {
+    err.textContent = 'Completá todos los campos.';
+    err.style.display = 'block'; return;
+  }
+  if (pass.length < 6) {
+    err.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+    err.style.display = 'block'; return;
+  }
+  if (pass !== pass2) {
+    err.textContent = 'Las contraseñas no coinciden.';
+    err.style.display = 'block'; return;
+  }
+  
   const btn = document.querySelector('#register-form .btn-primary');
   if (btn) { btn.textContent = 'Creando cuenta...'; btn.disabled = true; }
+  
   try {
     const res = await fetch('/api/register', {
       method: 'POST',
@@ -124,7 +140,7 @@ async function doRegister(e) {
   }
 }
 
-// ── LOGOUT ──
+// ─ LOGOUT ──
 function doLogout() {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
@@ -134,19 +150,25 @@ function doLogout() {
   if (liveInterval) clearInterval(liveInterval);
 }
 
-// ── Launch app ──
+// ── Launch app ─
 async function launchApp(user) {
   currentUser = user;
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app-screen').style.display = 'block';
+  
   const initials = user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
   document.getElementById('sidebar-avatar').textContent = initials;
   document.getElementById('sidebar-name').textContent = user.name.split(' ')[0];
   document.getElementById('sidebar-email').textContent = user.email;
+  
   initCharts();
-  await Promise.all([loadPool(), loadLatestMeasurement(), loadHistorial(), buildAlertas()]);
+  await Promise.all([
+    loadPool(),
+    loadLatestMeasurement(),
+    loadHistorial(),
+    buildAlertas(),
+  ]);
   startLiveData();
-  if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
 // ── Navigation ──
@@ -155,22 +177,30 @@ function showSection(s, element) {
     const el = document.getElementById('section-' + id);
     if (el) el.style.display = id === s ? '' : 'none';
   });
+  
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   if (element) element.classList.add('active');
+  
   if (s === 'historial') draw7dChart();
   if (s === 'alertas') buildAlertas();
+  
   if (window.innerWidth <= 900) closeSidebar();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // ── Menú hamburguesa ──
 function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('open');
-  document.getElementById('sidebar-overlay').classList.toggle('show');
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  if (sidebar) sidebar.classList.toggle('open');
+  if (overlay) overlay.classList.toggle('show');
 }
+
 function closeSidebar() {
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('sidebar-overlay').classList.remove('show');
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  if (sidebar) sidebar.classList.remove('open');
+  if (overlay) overlay.classList.remove('show');
 }
 
 // ── Charts ──
@@ -179,6 +209,7 @@ function initCharts() {
   const data = [7.1, 7.3, 7.6, 7.8, 8.1, 7.5, 7.3, 7.2, 7.4, 7.3, 7.1, 7.0, 7.2, 7.3, 7.2, 7.4, 7.5, 7.3, 7.2, 7.1, 7.3, 7.4, 7.3, 7.2];
   drawLine(svg, data, 6.5, 8.5, 500, 120);
 }
+
 function drawLine(svg, data, min, max, W, H) {
   if (!svg || data.length === 0) return;
   const pts = data.map((v, i) => `${(i / (data.length - 1)) * W},${H - ((v - min) / (max - min)) * H}`);
@@ -192,6 +223,7 @@ function drawLine(svg, data, min, max, W, H) {
     <line x1="0" y1="${yLo}" x2="${W}" y2="${yLo}" stroke="rgba(34,211,163,0.3)" stroke-dasharray="4"/>
   `;
 }
+
 async function draw7dChart() {
   const svg = document.getElementById('ph-chart-7d');
   if (!svg) return;
@@ -217,24 +249,38 @@ async function loadPool() {
     }
   } catch { /* silencio */ }
 }
+
 async function savePool() {
   const largo = parseFloat(document.getElementById('pool-largo').value) || 0;
   const ancho = parseFloat(document.getElementById('pool-ancho').value) || 0;
   const profundidad = parseFloat(document.getElementById('pool-prof').value) || 0;
   if (largo <= 0 || ancho <= 0 || profundidad <= 0) return;
   try {
-    await authFetch('/api/pool', { method: 'PUT', body: JSON.stringify({ largo, ancho, profundidad }) });
+    await authFetch('/api/pool', {
+      method: 'PUT',
+      body: JSON.stringify({ largo, ancho, profundidad }),
+    });
   } catch { /* silencio */ }
 }
+
 function calcVol() {
   const l = parseFloat(document.getElementById('pool-largo').value) || 0;
   const a = parseFloat(document.getElementById('pool-ancho').value) || 0;
   const p = parseFloat(document.getElementById('pool-prof').value) || 0;
   const vol = (l * a * p).toFixed(1);
   const textEl = document.getElementById('pool-volume-text');
-  if (vol <= 0) { textEl.innerHTML = 'Ingresá las dimensiones para calcular el volumen'; return; }
-  textEl.innerHTML = `Volumen estimado: <strong>${vol} m³</strong> · Equivalente a ${(vol * 1000).toLocaleString('es-AR')} litros de agua`;
-  document.getElementById('card-vol').textContent = vol;
+  const cardVol = document.getElementById('card-vol');
+  
+  if (vol <= 0) {
+    if (textEl) textEl.innerHTML = 'Ingresá las dimensiones para calcular el volumen';
+    return;
+  }
+  
+  if (textEl) {
+    textEl.innerHTML = `Volumen estimado: <strong>${vol} m³</strong> · Equivalente a ${(vol * 1000).toLocaleString('es-AR')} litros de agua`;
+  }
+  if (cardVol) cardVol.textContent = vol;
+  
   clearTimeout(window._poolSaveTimer);
   window._poolSaveTimer = setTimeout(savePool, 800);
 }
@@ -244,20 +290,34 @@ async function loadLatestMeasurement() {
   try {
     const res = await authFetch('/api/measurements/latest');
     const data = await res.json();
-    if (data.ok && data.measurement) updateMetrics(data.measurement);
+    if (data.ok && data.measurement) {
+      updateMetrics(data.measurement);
+    }
   } catch { /* silencio */ }
 }
+
 function updateMetrics(m) {
-  if (typeof m.ph === 'number') {
-    document.getElementById('card-ph').textContent = m.ph.toFixed(2);
-    const pct = Math.max(0, Math.min(100, (m.ph / 14) * 100));
-    document.getElementById('ph-marker').style.left = pct + '%';
+  const phEl = document.getElementById('card-ph');
+  const tempEl = document.getElementById('card-temp');
+  const clEl = document.getElementById('card-cl');
+  const markerEl = document.getElementById('ph-marker');
+  
+  if (typeof m.ph === 'number' && phEl) {
+    phEl.textContent = m.ph.toFixed(2);
+    if (markerEl) {
+      const pct = Math.max(0, Math.min(100, (m.ph / 14) * 100));
+      markerEl.style.left = pct + '%';
+    }
   }
-  if (typeof m.temperatura === 'number') document.getElementById('card-temp').textContent = m.temperatura.toFixed(1);
-  if (typeof m.cloro === 'number') document.getElementById('card-cl').textContent = m.cloro.toFixed(1);
+  if (typeof m.temperatura === 'number' && tempEl) {
+    tempEl.textContent = m.temperatura.toFixed(1);
+  }
+  if (typeof m.cloro === 'number' && clEl) {
+    clEl.textContent = m.cloro.toFixed(1);
+  }
 }
 
-// ─ Historial ──
+// ── Historial ──
 async function loadHistorial() {
   try {
     const res = await authFetch('/api/dosing');
@@ -285,7 +345,7 @@ async function loadHistorial() {
   } catch { /* silencio */ }
 }
 
-// ── Alertas ──
+// ── Alertas ─
 async function buildAlertas() {
   const lista = document.getElementById('alertas-list');
   if (!lista) return;
@@ -305,7 +365,11 @@ async function buildAlertas() {
       });
     }
     if (!alertas.length) {
-      alertas.push({ type: 'ok', msg: 'Sin alertas recientes. El sistema está monitoreando.', time: '—' });
+      alertas.push({
+        type: 'ok',
+        msg: 'Sin alertas recientes. El sistema está monitoreando.',
+        time: '—',
+      });
     }
     lista.innerHTML = alertas.map(a => `
       <div class="alert-item">
@@ -316,43 +380,72 @@ async function buildAlertas() {
         </div>
       </div>`).join('');
   } catch {
-    lista.innerHTML = `<div class="alert-item"><div class="alert-dot alert"></div><div><div class="alert-text">Error al cargar las alertas</div><div class="alert-time">Verificá la conexión con el servidor</div></div></div>`;
+    lista.innerHTML = `<div class="alert-item">
+      <div class="alert-dot alert"></div>
+      <div>
+        <div class="alert-text">Error al cargar las alertas</div>
+        <div class="alert-time">Verificá la conexión con el servidor</div>
+      </div>
+    </div>`;
   }
 }
 
-// ── DOSIFICACIÓN ──
+// ── DOSIFICACIÓN (NUEVA FUNCIÓN) ──
 async function dosificar(tipo) {
   const autoModeEl = document.getElementById('auto-mode');
   const modo = autoModeEl && autoModeEl.checked ? 'automatico' : 'manual';
+  
   const btn = event.currentTarget;
   const originalHTML = btn.innerHTML;
   btn.innerHTML = '<div style="opacity:0.6;">Procesando...</div>';
   btn.disabled = true;
+  
   try {
-    const res = await authFetch('/api/dosing', { method: 'POST', body: JSON.stringify({ tipo, modo }) });
+    const res = await authFetch('/api/dosing', {
+      method: 'POST',
+      body: JSON.stringify({ tipo, modo }),
+    });
     const data = await res.json();
+    
     if (data.ok) {
       mostrarNotificacion(`✅ Dosificación de ${tipo} en modo ${modo} completada`, 'ok');
-      await Promise.all([loadLatestMeasurement(), loadHistorial(), buildAlertas()]);
+      await Promise.all([
+        loadLatestMeasurement(),
+        loadHistorial(),
+        buildAlertas(),
+      ]);
     } else {
       mostrarNotificacion(`❌ ${data.error || 'Error al dosificar'}`, 'alert');
     }
-  } catch {
+  } catch (err) {
+    console.error('Error en dosificar:', err);
     mostrarNotificacion('❌ Error de conexión con el servidor', 'alert');
   } finally {
     btn.innerHTML = originalHTML;
     btn.disabled = false;
-    if (typeof lucide !== 'undefined') lucide.createIcons();
   }
 }
 
 // ── Notificaciones ──
 function mostrarNotificacion(mensaje, tipo = 'ok') {
   const notif = document.createElement('div');
-  notif.style.cssText = `position:fixed;top:20px;right:20px;z-index:1000;padding:14px 20px;border-radius:12px;background:${tipo === 'ok' ? 'rgba(34,211,163,0.15)' : 'rgba(255,77,109,0.15)'};border:1px solid ${tipo === 'ok' ? 'var(--green-ok)' : 'var(--red-alert)'};color:var(--text-primary);font-size:14px;font-weight:500;backdrop-filter:blur(10px);animation:slideIn 0.3s ease;`;
+  notif.style.cssText = `
+    position: fixed; top: 20px; right: 20px; z-index: 1000;
+    padding: 14px 20px; border-radius: 12px;
+    background: ${tipo === 'ok' ? 'rgba(34,211,163,0.15)' : 'rgba(255,77,109,0.15)'};
+    border: 1px solid ${tipo === 'ok' ? 'var(--green-ok)' : 'var(--red-alert)'};
+    color: var(--text-primary); font-size: 14px; font-weight: 500;
+    backdrop-filter: blur(10px);
+    animation: slideIn 0.3s ease;
+  `;
   notif.textContent = mensaje;
   document.body.appendChild(notif);
-  setTimeout(() => { notif.style.opacity = '0'; notif.style.transition = 'opacity 0.3s'; setTimeout(() => notif.remove(), 300); }, 3000);
+  
+  setTimeout(() => {
+    notif.style.opacity = '0';
+    notif.style.transition = 'opacity 0.3s';
+    setTimeout(() => notif.remove(), 300);
+  }, 3000);
 }
 
 // ── Live data ──
@@ -361,7 +454,7 @@ function startLiveData() {
   liveInterval = setInterval(loadLatestMeasurement, 5000);
 }
 
-// ─ Enter key ──
+// ── Enter key ──
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
   const loginVisible = document.getElementById('login-form')?.style.display !== 'none';
