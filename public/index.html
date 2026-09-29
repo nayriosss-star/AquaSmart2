@@ -6,191 +6,6 @@
     <title>AquaSmart – Control inteligente de tu piscina</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://unpkg.com/lucide@latest"></script>
-    <style>
-        /* Estilos adicionales para el menú hamburguesa y botones de dosificación */
-        .hamburger-btn {
-            display: none;
-            background: transparent;
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 10px;
-            cursor: pointer;
-            color: var(--text-primary);
-            transition: all 0.2s;
-        }
-        
-        .hamburger-btn:hover {
-            background: rgba(0,200,224,0.08);
-            border-color: var(--aqua);
-        }
-        
-        .sidebar-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.5);
-            z-index: 99;
-        }
-        
-        .dosage-btn {
-            padding: 24px;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-align: center;
-            border: 1px solid rgba(255,255,255,0.1);
-            background: rgba(255,255,255,0.03);
-        }
-        
-        .dosage-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-        }
-        
-        .dosage-btn.ph-up {
-            background: rgba(0,200,224,0.08);
-            border-color: rgba(0,200,224,0.3);
-        }
-        
-        .dosage-btn.ph-up:hover {
-            background: rgba(0,200,224,0.12);
-            border-color: rgba(0,200,224,0.5);
-        }
-        
-        .dosage-btn.ph-down {
-            background: rgba(255,184,48,0.08);
-            border-color: rgba(255,184,48,0.3);
-        }
-        
-        .dosage-btn.ph-down:hover {
-            background: rgba(255,184,48,0.12);
-            border-color: rgba(255,184,48,0.5);
-        }
-        
-        .dosage-btn.chlorine {
-            background: rgba(255,215,0,0.08);
-            border-color: rgba(255,215,0,0.3);
-        }
-        
-        .dosage-btn.chlorine:hover {
-            background: rgba(255,215,0,0.12);
-            border-color: rgba(255,215,0,0.5);
-        }
-        
-        .dosage-btn-icon {
-            width: 48px;
-            height: 48px;
-            margin: 0 auto 12px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .dosage-btn.ph-up .dosage-btn-icon {
-            background: rgba(0,200,224,0.15);
-        }
-        
-        .dosage-btn.ph-down .dosage-btn-icon {
-            background: rgba(255,184,48,0.15);
-        }
-        
-        .dosage-btn.chlorine .dosage-btn-icon {
-            background: rgba(255,215,0,0.15);
-        }
-        
-        .dosage-btn-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 4px;
-        }
-        
-        .dosage-btn-subtitle {
-            font-size: 12px;
-            color: var(--text-secondary);
-        }
-        
-        .toggle-switch {
-            position: relative;
-            display: inline-block;
-            width: 50px;
-            height: 26px;
-        }
-        
-        .toggle-switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-        
-        .toggle-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(255,255,255,0.1);
-            border-radius: 26px;
-            transition: 0.3s;
-            border: 1px solid rgba(255,255,255,0.2);
-        }
-        
-        .toggle-slider:before {
-            position: absolute;
-            content: "";
-            height: 20px;
-            width: 20px;
-            left: 3px;
-            bottom: 2px;
-            background: white;
-            border-radius: 50%;
-            transition: 0.3s;
-        }
-        
-        .toggle-switch input:checked + .toggle-slider {
-            background: var(--aqua);
-        }
-        
-        .toggle-switch input:checked + .toggle-slider:before {
-            transform: translateX(24px);
-        }
-        
-        @media (max-width: 900px) {
-            .hamburger-btn {
-                display: block;
-            }
-            
-            .sidebar {
-                transform: translateX(-100%);
-                transition: transform 0.3s ease;
-            }
-            
-            .sidebar.open {
-                transform: translateX(0);
-            }
-            
-            .sidebar-overlay.show {
-                display: block;
-            }
-            
-            .sidebar-logo-text,
-            .nav-item span,
-            .user-info,
-            .nav-section-label {
-                display: block;
-            }
-            
-            .nav-item {
-                justify-content: flex-start;
-                padding: 11px 12px;
-            }
-        }
-    </style>
 </head>
 <body>
     <!-- Water Background Animation -->
@@ -268,7 +83,7 @@
     <div id="app-screen">
         <!-- Sidebar Overlay -->
         <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
-        
+
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-logo">
@@ -279,23 +94,23 @@
             </div>
 
             <div class="nav-section-label">Principal</div>
-            <div class="nav-item active" onclick="showSection('dashboard')">
+            <div class="nav-item active" onclick="showSection('dashboard', this)">
                 <i data-lucide="layout-dashboard" class="icon"></i>
                 <span>Dashboard</span>
             </div>
-            <div class="nav-item" onclick="showSection('pool')">
+            <div class="nav-item" onclick="showSection('pool', this)">
                 <i data-lucide="waves" class="icon"></i>
                 <span>Mi Piscina</span>
             </div>
-            <div class="nav-item" onclick="showSection('history')">
+            <div class="nav-item" onclick="showSection('history', this)">
                 <i data-lucide="history" class="icon"></i>
                 <span>Historial</span>
             </div>
-            <div class="nav-item" onclick="showSection('alerts')">
+            <div class="nav-item" onclick="showSection('alerts', this)">
                 <i data-lucide="bell" class="icon"></i>
                 <span>Alertas</span>
             </div>
-            <div class="nav-item" onclick="showSection('ia')">
+            <div class="nav-item" onclick="showSection('ia', this)">
                 <i data-lucide="brain" class="icon"></i>
                 <span>IA & Reportes</span>
             </div>
@@ -309,7 +124,7 @@
                     </div>
                 </div>
                 <button class="logout-btn" onclick="handleLogout()">
-                    <i data-lucide="log-out" style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-right:6px;"></i>
+                    <i data-lucide="log-out" style="width:14px;height:14px;"></i>
                     Cerrar sesión
                 </button>
             </div>
@@ -345,7 +160,7 @@
                         </div>
                         <div class="metric-value">7.3</div>
                         <div class="metric-status ok">
-                            <i data-lucide="check-circle" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-right:4px;"></i>
+                            <i data-lucide="check-circle" style="width:12px;height:12px;"></i>
                             Nivel óptimo (6.8–7.6)
                         </div>
                         <div class="ph-bar-wrap">
@@ -365,7 +180,7 @@
                         </div>
                         <div class="metric-value">24<span class="metric-unit"> °C</span></div>
                         <div class="metric-status ok">
-                            <i data-lucide="check-circle" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-right:4px;"></i>
+                            <i data-lucide="check-circle" style="width:12px;height:12px;"></i>
                             Confortable (22–28°C)
                         </div>
                     </div>
@@ -377,7 +192,7 @@
                         </div>
                         <div class="metric-value">1.4<span class="metric-unit"> ppm</span></div>
                         <div class="metric-status warn">
-                            <i data-lucide="alert-triangle" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-right:4px;"></i>
+                            <i data-lucide="alert-triangle" style="width:12px;height:12px;"></i>
                             Bajo — revisar dosificación
                         </div>
                     </div>
@@ -389,7 +204,7 @@
                         </div>
                         <div class="metric-value">45<span class="metric-unit"> m³</span></div>
                         <div class="metric-status ok">
-                            <i data-lucide="check-circle" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-right:4px;"></i>
+                            <i data-lucide="check-circle" style="width:12px;height:12px;"></i>
                             Calculado automáticamente
                         </div>
                     </div>
@@ -397,7 +212,7 @@
 
                 <!-- Dosification Control Panel -->
                 <div class="pool-panel">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
                         <div>
                             <div class="chart-title">Control de dosificación</div>
                             <div class="chart-subtitle">Modo manual o automático</div>
@@ -411,7 +226,7 @@
                         </div>
                     </div>
 
-                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px;">
+                    <div class="dosage-buttons-grid">
                         <button onclick="dosificar('ph_subir')" class="dosage-btn ph-up">
                             <div class="dosage-btn-icon">
                                 <i data-lucide="arrow-up" style="width:24px;height:24px;color:var(--aqua);"></i>
@@ -548,7 +363,7 @@
                         </div>
                         
                         <div class="pool-volume">
-                            <i data-lucide="droplets" style="width:16px;height:16px;display:inline-block;vertical-align:middle;margin-right:6px;"></i>
+                            <i data-lucide="droplets" style="width:16px;height:16px;"></i>
                             Volumen estimado: <strong>75 m³</strong> · Equivalente a 75,000 litros de agua
                         </div>
                     </div>
@@ -593,26 +408,28 @@
 
                     <div style="margin-top:24px;">
                         <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:16px;">Registro de dosificaciones</div>
-                        <table style="width:100%;border-collapse:collapse;">
-                            <thead>
-                                <tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
-                                    <th style="text-align:left;padding:12px;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">Fecha</th>
-                                    <th style="text-align:left;padding:12px;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">Hora</th>
-                                    <th style="text-align:left;padding:12px;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">pH previo</th>
-                                    <th style="text-align:left;padding:12px;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">Acción</th>
-                                    <th style="text-align:left;padding:12px;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">pH posterior</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-                                    <td style="padding:12px;font-size:13px;color:var(--text-primary);">29/09/2026</td>
-                                    <td style="padding:12px;font-size:13px;color:var(--text-primary);">14:30</td>
-                                    <td style="padding:12px;font-size:13px;color:var(--text-primary);">7.8</td>
-                                    <td style="padding:12px;font-size:13px;color:var(--text-primary);">Ácido</td>
-                                    <td style="padding:12px;font-size:13px;color:var(--text-primary);">7.3</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                        <div style="overflow-x:auto;">
+                            <table style="width:100%;border-collapse:collapse;min-width:500px;">
+                                <thead>
+                                    <tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
+                                        <th style="text-align:left;padding:12px;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">Fecha</th>
+                                        <th style="text-align:left;padding:12px;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">Hora</th>
+                                        <th style="text-align:left;padding:12px;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">pH previo</th>
+                                        <th style="text-align:left;padding:12px;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">Acción</th>
+                                        <th style="text-align:left;padding:12px;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">pH posterior</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                                        <td style="padding:12px;font-size:13px;color:var(--text-primary);">29/09/2026</td>
+                                        <td style="padding:12px;font-size:13px;color:var(--text-primary);">14:30</td>
+                                        <td style="padding:12px;font-size:13px;color:var(--text-primary);">7.8</td>
+                                        <td style="padding:12px;font-size:13px;color:var(--text-primary);">Ácido</td>
+                                        <td style="padding:12px;font-size:13px;color:var(--text-primary);">7.3</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -642,7 +459,7 @@
                                 <div class="metric-label">pH promedio mensual</div>
                                 <div class="metric-value">7.18</div>
                                 <div class="metric-status ok">
-                                    <i data-lucide="check-circle" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-right:4px;"></i>
+                                    <i data-lucide="check-circle" style="width:12px;height:12px;"></i>
                                     Dentro del rango óptimo
                                 </div>
                             </div>
@@ -655,7 +472,7 @@
                                 <div class="metric-label">Cloro estimado prom.</div>
                                 <div class="metric-value">1.6<span class="metric-unit"> ppm</span></div>
                                 <div class="metric-status warn">
-                                    <i data-lucide="alert-triangle" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-right:4px;"></i>
+                                    <i data-lucide="alert-triangle" style="width:12px;height:12px;"></i>
                                     Ligeramente bajo
                                 </div>
                             </div>
@@ -663,7 +480,7 @@
                                 <div class="metric-label">Temp. promedio</div>
                                 <div class="metric-value">23.4<span class="metric-unit">°C</span></div>
                                 <div class="metric-status ok">
-                                    <i data-lucide="check-circle" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-right:4px;"></i>
+                                    <i data-lucide="check-circle" style="width:12px;height:12px;"></i>
                                     Confortable
                                 </div>
                             </div>
@@ -672,7 +489,7 @@
 
                     <div style="margin-top:24px;padding:20px;background:linear-gradient(135deg,rgba(0,200,224,0.08),rgba(0,102,170,0.08));border:1px solid rgba(0,200,224,0.2);border-radius:12px;">
                         <div style="display:flex;gap:16px;">
-                            <div style="font-size:32px;">
+                            <div style="flex-shrink:0;">
                                 <i data-lucide="brain" style="width:32px;height:32px;color:var(--aqua);"></i>
                             </div>
                             <div>
@@ -733,7 +550,7 @@
         }
 
         // Section navigation
-        function showSection(section) {
+        function showSection(section, element) {
             const sections = ['dashboard', 'pool', 'history', 'alerts', 'ia'];
             sections.forEach(s => {
                 document.getElementById(s + '-section').style.display = s === section ? 'block' : 'none';
@@ -741,12 +558,15 @@
             
             const navItems = document.querySelectorAll('.nav-item');
             navItems.forEach(item => item.classList.remove('active'));
-            event.currentTarget.classList.add('active');
+            if (element) element.classList.add('active');
             
             // Cerrar sidebar en móvil
             if (window.innerWidth <= 900) {
                 closeSidebar();
             }
+            
+            // Scroll al top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         // Hamburger menu
@@ -763,17 +583,6 @@
             sidebar.classList.remove('open');
             overlay.classList.remove('show');
         }
-
-        // Auto mode toggle
-        const autoModeCheckbox = document.getElementById('auto-mode');
-        
-        autoModeCheckbox.addEventListener('change', function() {
-            if (this.checked) {
-                console.log('Modo automático activado');
-            } else {
-                console.log('Modo manual activado');
-            }
-        });
 
         // Dosification function
         function dosificar(tipo) {
