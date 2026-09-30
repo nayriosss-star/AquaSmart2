@@ -29,7 +29,7 @@ const app = express();
 
 // ── Seguridad base ──
 app.use(helmet({
-  contentSecurityPolicy: false, // permitimos Google Fonts y estilos inline
+  contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
 }));
 app.use(cors());
@@ -46,7 +46,7 @@ const authLimiter = rateLimit({
 
 const deviceLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 120, // 2 lecturas por segundo como máximo
+  max: 120,
   message: { error: 'Demasiadas lecturas del dispositivo.' },
 });
 
@@ -73,7 +73,6 @@ function generarToken(user) {
   );
 }
 
-// Simula el cloro a partir de la temperatura (solo para demo)
 function simularCloro(temperatura) {
   const base = 2.0;
   const efectoTemp = (temperatura - 24) * -0.05;
@@ -81,12 +80,10 @@ function simularCloro(temperatura) {
   return +Math.max(0, base + efectoTemp + ruido).toFixed(2);
 }
 
-// Evalúa pH y decide si dosificar (con cooldown de 15 min)
 async function evaluarYdosificar(userId, medicion, pool) {
   const { ph } = medicion;
   const volumen = pool ? pool.volumen : 10;
 
-  // Cooldown: no dosificar si hubo un evento en los últimos 15 minutos
   const reciente = await DosingEvent.findOne({
     userId,
     createdAt: { $gte: new Date(Date.now() - 15 * 60 * 1000) },
@@ -150,7 +147,6 @@ app.post('/api/register', authLimiter, async (req, res) => {
     const hash = await bcrypt.hash(password, 12);
     const user = await User.create({ name: name.trim(), email: emailNorm, password: hash });
 
-    // Crear pool por defecto
     await Pool.create({ userId: user._id });
 
     const token = generarToken(user);
@@ -232,7 +228,7 @@ app.put('/api/pool', verificarToken, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
-// RUTAS DE MEDICIONES Y DOSIFICACIÓN
+// RUTAS DE MEDICIONES
 // ═══════════════════════════════════════════
 
 app.get('/api/measurements/latest', verificarToken, async (req, res) => {
@@ -247,7 +243,7 @@ app.get('/api/measurements/latest', verificarToken, async (req, res) => {
 
 app.get('/api/measurements', verificarToken, async (req, res) => {
   try {
-    const horas = Math.min(Math.max(parseInt(req.query.horas) || 24, 1), 720); // 1h a 30d
+    const horas = Math.min(Math.max(parseInt(req.query.horas) || 24, 1), 720);
     const desde = new Date(Date.now() - horas * 60 * 60 * 1000);
     const mediciones = await Measurement.find({
       userId: req.userId,
@@ -259,6 +255,10 @@ app.get('/api/measurements', verificarToken, async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════
+// RUTAS DE DOSIFICACIÓN
+// ═══════════════════════════════════════════
+
 app.get('/api/dosing', verificarToken, async (req, res) => {
   try {
     const eventos = await DosingEvent.find({ userId: req.userId })
@@ -269,28 +269,23 @@ app.get('/api/dosing', verificarToken, async (req, res) => {
   }
 });
 
-// POST /api/dosing - Dosificación manual desde el frontend
 app.post('/api/dosing', verificarToken, async (req, res) => {
   try {
     const { tipo, modo } = req.body;
     const userId = req.userId;
 
-    // Validar tipo
     const tiposValidos = ['ph_subir', 'ph_bajar', 'cloro'];
     if (!tiposValidos.includes(tipo)) {
       return res.status(400).json({ ok: false, error: 'Tipo de dosificación inválido.' });
     }
 
-    // Validar modo
     if (!['manual', 'automatico'].includes(modo)) {
       return res.status(400).json({ ok: false, error: 'Modo inválido.' });
     }
 
-    // Obtener volumen de la piscina
     const pool = await Pool.findOne({ userId });
     const volumen = pool ? pool.volumen : 10;
 
-    // Mapear tipo a acción
     let accion;
     if (tipo === 'ph_subir') {
       accion = {
@@ -315,89 +310,13 @@ app.post('/api/dosing', verificarToken, async (req, res) => {
       };
     }
 
-    // Crear evento de dosificación
     const evento = await DosingEvent.create({
       userId,
       tipo: accion.tipo,
       cantidad: accion.cantidad,
       unidad: accion.unidad,
       motivo: accion.motivo,
-      modo: modo, // ← IMPORTANTE: guardar el modo
-      ejecutado: false,
-    });
-
-    res.json({
-      ok: true,
-      evento: {
-        id: evento._id,
-        tipo: evento.tipo,
-        cantidad: evento.cantidad,
-        unidad: evento.unidad,
-        modo: evento.modo,
-        motivo: evento.motivo,
-      },
-      message: `Dosificación de ${tipo} en modo ${modo} registrada correctamente.`,
-    });
-  } catch (err) {
-    console.error('Error en POST /api/dosing:', err);
-    res.status(500).json({ ok: false, error: 'Error interno del servidor.' });
-  }
-});
-
-// 🆕 POST /api/dosing - Dosificación manual desde el frontend
-app.post('/api/dosing', verificarToken, async (req, res) => {
-  try {
-    const { tipo, modo } = req.body;
-    const userId = req.userId;
-
-    // Validar tipo
-    const tiposValidos = ['ph_subir', 'ph_bajar', 'cloro'];
-    if (!tiposValidos.includes(tipo)) {
-      return res.status(400).json({ ok: false, error: 'Tipo de dosificación inválido.' });
-    }
-
-    // Validar modo
-    if (!['manual', 'automatico'].includes(modo)) {
-      return res.status(400).json({ ok: false, error: 'Modo inválido.' });
-    }
-
-    // Obtener volumen de la piscina para calcular cantidad
-    const pool = await Pool.findOne({ userId });
-    const volumen = pool ? pool.volumen : 10;
-
-    // Mapear tipo a acción
-    let accion;
-    if (tipo === 'ph_subir') {
-      accion = {
-        tipo: 'base',
-        cantidad: Math.round(0.4 * volumen * 12), // dosis estándar para subir ~0.2 pH
-        unidad: 'g',
-        motivo: `Dosificación ${modo} de base para subir pH`,
-      };
-    } else if (tipo === 'ph_bajar') {
-      accion = {
-        tipo: 'acido',
-        cantidad: Math.round(0.4 * volumen * 8), // dosis estándar para bajar ~0.2 pH
-        unidad: 'ml',
-        motivo: `Dosificación ${modo} de ácido para bajar pH`,
-      };
-    } else {
-      accion = {
-        tipo: 'cloro',
-        cantidad: Math.round(volumen * 1.5), // ~1.5g por m³
-        unidad: 'g',
-        motivo: `Dosificación ${modo} de cloro`,
-      };
-    }
-
-    // Crear evento de dosificación (AGREGADO: campo 'modo')
-    const evento = await DosingEvent.create({
-      userId,
-      tipo: accion.tipo,
-      cantidad: accion.cantidad,
-      unidad: accion.unidad,
-      motivo: accion.motivo,
-      modo: modo, 
+      modo: modo,
       ejecutado: false,
     });
 
@@ -451,7 +370,6 @@ app.post('/api/esp32/medicion', deviceLimiter, verificarDispositivo, async (req,
   }
 });
 
-// El ESP32 confirma que ejecutó la dosificación
 app.post('/api/esp32/dosing/:id/confirm', deviceLimiter, verificarDispositivo, async (req, res) => {
   try {
     const evento = await DosingEvent.findByIdAndUpdate(
@@ -482,12 +400,10 @@ app.get('/api/health', (_req, res) => {
 // FALLBACKS
 // ═══════════════════════════════════════════
 
-// 404 para /api/*
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: 'Endpoint no encontrado.' });
 });
 
-// SPA fallback (todas las rutas que no empiezan con /api)
 app.get(/^\/(?!api).*/, (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });

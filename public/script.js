@@ -1,4 +1,4 @@
-// ─ Bubbles ──
+// ── Bubbles ──
 (function () {
   const bg = document.getElementById('water-bg');
   if (!bg) return;
@@ -25,6 +25,13 @@ function authFetch(url, options = {}) {
       ...(options.headers || {}),
     },
   });
+}
+
+// ── Refresca los íconos de Lucide ──
+function refreshIcons() {
+  if (window.lucide && typeof window.lucide.createIcons === 'function') {
+    window.lucide.createIcons();
+  }
 }
 
 // ── Restaurar sesión al cargar ──
@@ -64,9 +71,9 @@ async function doLogin(e) {
   const pass = document.getElementById('login-pass').value;
   const err = document.getElementById('login-error');
   const btn = document.querySelector('#login-form .btn-primary');
-  
+
   if (btn) { btn.textContent = 'Ingresando...'; btn.disabled = true; }
-  
+
   try {
     const res = await fetch('/api/login', {
       method: 'POST',
@@ -99,7 +106,7 @@ async function doRegister(e) {
   const pass = document.getElementById('reg-pass').value;
   const pass2 = document.getElementById('reg-pass2').value;
   const err = document.getElementById('register-error');
-  
+
   if (!name || !email || !pass) {
     err.textContent = 'Completá todos los campos.';
     err.style.display = 'block'; return;
@@ -112,10 +119,10 @@ async function doRegister(e) {
     err.textContent = 'Las contraseñas no coinciden.';
     err.style.display = 'block'; return;
   }
-  
+
   const btn = document.querySelector('#register-form .btn-primary');
   if (btn) { btn.textContent = 'Creando cuenta...'; btn.disabled = true; }
-  
+
   try {
     const res = await fetch('/api/register', {
       method: 'POST',
@@ -140,7 +147,7 @@ async function doRegister(e) {
   }
 }
 
-// ─ LOGOUT ──
+// ── LOGOUT ──
 function doLogout() {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
@@ -150,24 +157,26 @@ function doLogout() {
   if (liveInterval) clearInterval(liveInterval);
 }
 
-// ── Launch app ─
+// ── Launch app ──
 async function launchApp(user) {
   currentUser = user;
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app-screen').style.display = 'block';
-  
+
   const initials = user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
   document.getElementById('sidebar-avatar').textContent = initials;
   document.getElementById('sidebar-name').textContent = user.name.split(' ')[0];
   document.getElementById('sidebar-email').textContent = user.email;
-  
+
   initCharts();
   await Promise.all([
     loadPool(),
     loadLatestMeasurement(),
     loadHistorial(),
     buildAlertas(),
+    buildActividadReciente(),
   ]);
+  refreshIcons();
   startLiveData();
 }
 
@@ -177,15 +186,17 @@ function showSection(s, element) {
     const el = document.getElementById('section-' + id);
     if (el) el.style.display = id === s ? '' : 'none';
   });
-  
+
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   if (element) element.classList.add('active');
-  
+
   if (s === 'historial') draw7dChart();
   if (s === 'alertas') buildAlertas();
-  
+  if (s === 'dashboard') buildActividadReciente();
+
   if (window.innerWidth <= 900) closeSidebar();
   window.scrollTo({ top: 0, behavior: 'smooth' });
+  refreshIcons();
 }
 
 // ── Menú hamburguesa ──
@@ -270,17 +281,17 @@ function calcVol() {
   const vol = (l * a * p).toFixed(1);
   const textEl = document.getElementById('pool-volume-text');
   const cardVol = document.getElementById('card-vol');
-  
+
   if (vol <= 0) {
     if (textEl) textEl.innerHTML = 'Ingresá las dimensiones para calcular el volumen';
     return;
   }
-  
+
   if (textEl) {
     textEl.innerHTML = `Volumen estimado: <strong>${vol} m³</strong> · Equivalente a ${(vol * 1000).toLocaleString('es-AR')} litros de agua`;
   }
   if (cardVol) cardVol.textContent = vol;
-  
+
   clearTimeout(window._poolSaveTimer);
   window._poolSaveTimer = setTimeout(savePool, 800);
 }
@@ -301,7 +312,7 @@ function updateMetrics(m) {
   const tempEl = document.getElementById('card-temp');
   const clEl = document.getElementById('card-cl');
   const markerEl = document.getElementById('ph-marker');
-  
+
   if (typeof m.ph === 'number' && phEl) {
     phEl.textContent = m.ph.toFixed(2);
     if (markerEl) {
@@ -345,7 +356,7 @@ async function loadHistorial() {
   } catch { /* silencio */ }
 }
 
-// ── Alertas ─
+// ── Alertas ──
 async function buildAlertas() {
   const lista = document.getElementById('alertas-list');
   if (!lista) return;
@@ -379,6 +390,7 @@ async function buildAlertas() {
           <div class="alert-time">${a.time}</div>
         </div>
       </div>`).join('');
+    refreshIcons();
   } catch {
     lista.innerHTML = `<div class="alert-item">
       <div class="alert-dot alert"></div>
@@ -390,30 +402,67 @@ async function buildAlertas() {
   }
 }
 
-// ── DOSIFICACIÓN (NUEVA FUNCIÓN) ──
-async function dosificar(tipo) {
+// ── Actividad reciente (dashboard) ──
+async function buildActividadReciente() {
+  const cont = document.getElementById('actividad-reciente');
+  if (!cont) return;
+  try {
+    const res = await authFetch('/api/dosing');
+    const data = await res.json();
+    const items = [];
+    if (data.ok && data.eventos.length) {
+      data.eventos.slice(0, 5).forEach(e => {
+        const fecha = new Date(e.createdAt);
+        const labels = { acido: 'ácido', base: 'base', cloro: 'cloro' };
+        items.push({
+          type: e.tipo === 'acido' ? 'warn' : 'ok',
+          msg: `Dosificación de ${labels[e.tipo] || e.tipo} (${e.cantidad} ${e.unidad}) — ${e.motivo || ''}`,
+          time: fecha.toLocaleString('es-AR'),
+        });
+      });
+    }
+    if (!items.length) {
+      items.push({ type: 'ok', msg: 'Sin actividad reciente.', time: '—' });
+    }
+    cont.innerHTML = items.map(a => `
+      <div class="alert-item">
+        <div class="alert-dot ${a.type}"></div>
+        <div>
+          <div class="alert-text">${a.msg}</div>
+          <div class="alert-time">${a.time}</div>
+        </div>
+      </div>`).join('');
+  } catch { /* silencio */ }
+}
+
+// ── DOSIFICACIÓN MANUAL ──
+async function dosificar(tipo, ev) {
   const autoModeEl = document.getElementById('auto-mode');
   const modo = autoModeEl && autoModeEl.checked ? 'automatico' : 'manual';
-  
-  const btn = event.currentTarget;
+
+  const btn = ev?.currentTarget || window.event?.currentTarget;
+  if (!btn) return;
+
   const originalHTML = btn.innerHTML;
   btn.innerHTML = '<div style="opacity:0.6;">Procesando...</div>';
   btn.disabled = true;
-  
+
   try {
     const res = await authFetch('/api/dosing', {
       method: 'POST',
       body: JSON.stringify({ tipo, modo }),
     });
     const data = await res.json();
-    
+
     if (data.ok) {
-      mostrarNotificacion(`✅ Dosificación de ${tipo} en modo ${modo} completada`, 'ok');
+      mostrarNotificacion(`✅ Dosificación registrada (${modo})`, 'ok');
       await Promise.all([
         loadLatestMeasurement(),
         loadHistorial(),
         buildAlertas(),
+        buildActividadReciente(),
       ]);
+      refreshIcons();
     } else {
       mostrarNotificacion(`❌ ${data.error || 'Error al dosificar'}`, 'alert');
     }
@@ -423,6 +472,7 @@ async function dosificar(tipo) {
   } finally {
     btn.innerHTML = originalHTML;
     btn.disabled = false;
+    refreshIcons();
   }
 }
 
@@ -440,7 +490,7 @@ function mostrarNotificacion(mensaje, tipo = 'ok') {
   `;
   notif.textContent = mensaje;
   document.body.appendChild(notif);
-  
+
   setTimeout(() => {
     notif.style.opacity = '0';
     notif.style.transition = 'opacity 0.3s';
@@ -454,7 +504,7 @@ function startLiveData() {
   liveInterval = setInterval(loadLatestMeasurement, 5000);
 }
 
-// ── Enter key ──
+// ── Enter key en login/register ──
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
   const loginVisible = document.getElementById('login-form')?.style.display !== 'none';

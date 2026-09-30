@@ -3,10 +3,11 @@ const mongoose = require('mongoose');
 const dosingEventSchema = new mongoose.Schema({
   userId:        { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   measurementId: { type: mongoose.Schema.Types.ObjectId, ref: 'Measurement' },
-  tipo:          { type: String, enum: ['acido', 'base'], required: true },
+  tipo:          { type: String, enum: ['acido', 'base', 'cloro'], required: true },
   cantidad:      { type: Number, required: true, min: 0 },
   unidad:        { type: String, enum: ['ml', 'g'], required: true },
   motivo:        { type: String, maxlength: 300 },
+  modo:          { type: String, enum: ['manual', 'automatico'], default: 'automatico' },
   ejecutado:     { type: Boolean, default: false },
 }, { timestamps: true });
 

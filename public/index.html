@@ -206,7 +206,7 @@
           </div>
 
           <div class="dosage-buttons-grid">
-            <button class="dosage-btn ph-up" onclick="dosificar('ph_subir')">
+            <button class="dosage-btn ph-up" onclick="dosificar('ph_subir', event)">
               <div class="dosage-btn-icon">
                 <i data-lucide="arrow-up" style="width:24px;height:24px;color:var(--aqua);"></i>
               </div>
@@ -214,7 +214,7 @@
               <div class="dosage-btn-subtitle">Agregar base</div>
             </button>
 
-            <button class="dosage-btn ph-down" onclick="dosificar('ph_bajar')">
+            <button class="dosage-btn ph-down" onclick="dosificar('ph_bajar', event)">
               <div class="dosage-btn-icon">
                 <i data-lucide="arrow-down" style="width:24px;height:24px;color:var(--yellow-warn);"></i>
               </div>
@@ -222,7 +222,7 @@
               <div class="dosage-btn-subtitle">Agregar ácido</div>
             </button>
 
-            <button class="dosage-btn chlorine" onclick="dosificar('cloro')">
+            <button class="dosage-btn chlorine" onclick="dosificar('cloro', event)">
               <div class="dosage-btn-icon">
                 <i data-lucide="droplets" style="width:24px;height:24px;color:#FFD700;"></i>
               </div>
@@ -272,36 +272,7 @@
 
         <div class="alerts-card">
           <div class="chart-title" style="margin-bottom:16px;">Actividad reciente</div>
-          <div id="actividad-reciente">
-            <div class="alert-item">
-              <div class="alert-dot warn"></div>
-              <div>
-                <div class="alert-text">Nivel de cloro estimado por debajo del rango (1.4 ppm)</div>
-                <div class="alert-time">Hace 12 minutos</div>
-              </div>
-            </div>
-            <div class="alert-item">
-              <div class="alert-dot ok"></div>
-              <div>
-                <div class="alert-text">Dosificación automática de ácido completada — pH corregido a 7.3</div>
-                <div class="alert-time">Hace 1 hora y 8 minutos</div>
-              </div>
-            </div>
-            <div class="alert-item">
-              <div class="alert-dot ok"></div>
-              <div>
-                <div class="alert-text">Sistema AquaSmart iniciado correctamente · ESP32 en línea</div>
-                <div class="alert-time">Hoy a las 08:00 hs</div>
-              </div>
-            </div>
-            <div class="alert-item">
-              <div class="alert-dot alert"></div>
-              <div>
-                <div class="alert-text">pH detectado en 8.1 (alto) — bomba ácido activada</div>
-                <div class="alert-time">Ayer a las 21:42 hs</div>
-              </div>
-            </div>
-          </div>
+          <div id="actividad-reciente"></div>
         </div>
       </section>
 
