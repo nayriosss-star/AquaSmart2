@@ -341,6 +341,35 @@ app.post('/api/dosing', verificarToken, async (req, res) => {
 // ═══════════════════════════════════════════
 // RUTAS DEL ESP32
 // ═══════════════════════════════════════════
+// El ESP32 consulta si hay dosificaciones manuales pendientes de ejecutar
+app.get('/api/esp32/pending-actions', verificarDispositivo, async (req, res) => {
+  try {
+    const userId = process.env.DEVICE_OWNER_ID;
+    
+    // Buscar el evento de dosificación más antiguo que aún no haya sido ejecutado
+    const evento = await DosingEvent.findOne({ 
+      userId, 
+      ejecutado: false 
+    }).sort({ createdAt: 1 }); 
+    
+    if (evento) {
+      res.json({ 
+        ok: true, 
+        accion: {
+          id: evento._id.toString(),
+          tipo: evento.tipo,
+          cantidad: evento.cantidad,
+          unidad: evento.unidad
+        }
+      });
+    } else {
+      res.json({ ok: true, accion: null });
+    }
+  } catch (err) {
+    console.error('Error en pending-actions:', err);
+    res.status(500).json({ error: 'Error del servidor.' });
+  }
+});
 
 app.post('/api/esp32/medicion', deviceLimiter, verificarDispositivo, async (req, res) => {
   try {
