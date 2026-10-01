@@ -9,6 +9,8 @@ const dosingEventSchema = new mongoose.Schema({
   motivo:        { type: String, maxlength: 300 },
   modo:          { type: String, enum: ['manual', 'automatico'], default: 'automatico' },
   ejecutado:     { type: Boolean, default: false },
+  ejecutadoEn:   { type: Date },
+  origen:        { type: String, enum: ['manual_web', 'automatico_esp32'], default: 'manual_web' },
 }, { timestamps: true });
 
 dosingEventSchema.index({ userId: 1, createdAt: -1 });

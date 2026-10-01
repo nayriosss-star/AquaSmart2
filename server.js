@@ -10,6 +10,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const mqtt = require('mqtt');
 
 const User = require('./models/User');
 const Pool = require('./models/Pool');
@@ -50,7 +51,7 @@ const deviceLimiter = rateLimit({
   message: { error: 'Demasiadas lecturas del dispositivo.' },
 });
 
-// ── Archivos estáticos (solo /public) ──
+// ── Archivos estáticos ──
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Conexión a MongoDB ──
@@ -107,7 +108,14 @@ async function evaluarYdosificar(userId, medicion, pool) {
   if (!tipo) return null;
 
   const evento = await DosingEvent.create({
-    userId, measurementId: medicion._id, tipo, cantidad, unidad, motivo, modo: 'automatico',
+    userId,
+    measurementId: medicion._id,
+    tipo,
+    cantidad,
+    unidad,
+    motivo,
+    modo: 'automatico',
+    origen: 'automatico_esp32',
   });
 
   return {
@@ -117,6 +125,126 @@ async function evaluarYdosificar(userId, medicion, pool) {
     motivo: evento.motivo,
     eventId: evento._id,
   };
+}
+
+// ═══════════════════════════════════════════
+// LÓGICA COMPARTIDA: procesar medición
+// ═══════════════════════════════════════════
+
+async function procesarMedicion({ ph, temperatura, esp32Id, origen }) {
+  const userId = process.env.DEVICE_OWNER_ID;
+  const cloro = simularCloro(temperatura);
+
+  // Deduplicación: si ya existe una medición con este esp32Id, no la guardamos de nuevo
+  if (esp32Id) {
+    const existente = await Measurement.findOne({ esp32Id, userId });
+    if (existente) {
+      console.log(`⏭️  Medición duplicada ignorada (esp32Id: ${esp32Id})`);
+      return { medicion: existente, accion: null, duplicada: true };
+    }
+  }
+
+  const medicion = await Measurement.create({
+    userId,
+    ph,
+    cloro,
+    temperatura,
+    origen,
+    esp32Id,
+  });
+
+  const pool = await Pool.findOne({ userId });
+  const accion = await evaluarYdosificar(userId, medicion, pool);
+
+  // Si hay acción y es automática, la publicamos por MQTT para que el ESP32 la ejecute
+  if (accion && mqttClient && mqttClient.connected) {
+    const topicComandos = `${process.env.MQTT_TOPIC_BASE}/comandos`;
+    const comando = {
+      accion: 'dosificar',
+      tipo: accion.tipo,
+      cantidad: accion.cantidad,
+      unidad: accion.unidad,
+      eventId: accion.eventId.toString(),
+      ts: Date.now(),
+    };
+    mqttClient.publish(topicComandos, JSON.stringify(comando));
+    console.log(`📤 Comando publicado en ${topicComandos}:`, comando);
+  }
+
+  return { medicion, accion, duplicada: false };
+}
+
+// ═══════════════════════════════════════════
+// CLIENTE MQTT
+// ═══════════════════════════════════════════
+
+let mqttClient = null;
+
+function iniciarMQTT() {
+  const broker = process.env.MQTT_BROKER || 'mqtt://broker.emqx.io:1883';
+  const topicBase = process.env.MQTT_TOPIC_BASE;
+
+  if (!topicBase) {
+    console.warn('⚠️  MQTT_TOPIC_BASE no definido. Saltando MQTT.');
+    return;
+  }
+
+  console.log(`📡 Conectando al broker MQTT: ${broker}`);
+  mqttClient = mqtt.connect(broker, {
+    clientId: `aquasmart_backend_${Math.random().toString(16).slice(3)}`,
+    clean: true,
+    reconnectPeriod: 5000,
+  });
+
+  mqttClient.on('connect', () => {
+    console.log('✅ Backend conectado al broker MQTT');
+    const topicDatos = `${topicBase}/datos`;
+    mqttClient.subscribe(topicDatos, { qos: 1 }, (err) => {
+      if (err) {
+        console.error('❌ Error al suscribirse:', err.message);
+      } else {
+        console.log(`📡 Suscrito a: ${topicDatos}`);
+      }
+    });
+  });
+
+  mqttClient.on('message', async (topic, message) => {
+    try {
+      const data = JSON.parse(message.toString());
+      console.log(`📥 MQTT [${topic}]:`, data);
+
+      // Validaciones
+      if (typeof data.ph !== 'number' || typeof data.temperatura !== 'number') {
+        console.warn('⚠️  Datos inválidos, ignorando');
+        return;
+      }
+      if (data.ph < 0 || data.ph > 14 || data.temperatura < -10 || data.temperatura > 60) {
+        console.warn('⚠️  Valores fuera de rango, ignorando');
+        return;
+      }
+
+      await procesarMedicion({
+        ph: data.ph,
+        temperatura: data.temperatura,
+        esp32Id: data.id || null,
+        origen: 'esp32_mqtt',
+      });
+    } catch (err) {
+      console.error('❌ Error procesando mensaje MQTT:', err.message);
+    }
+  });
+
+  mqttClient.on('error', (err) => {
+    console.error('❌ Error MQTT:', err.message);
+  });
+
+  mqttClient.on('reconnect', () => {
+    console.log('🔄 Reconectando MQTT...');
+  });
+
+  mqttClient.on('offline', () => {
+    console.log('⚠️  MQTT offline');
+  });
 }
 
 // ═══════════════════════════════════════════
@@ -317,8 +445,25 @@ app.post('/api/dosing', verificarToken, async (req, res) => {
       unidad: accion.unidad,
       motivo: accion.motivo,
       modo: modo,
+      origen: 'manual_web',
       ejecutado: false,
     });
+
+    // Publicar comando MQTT para que el ESP32 ejecute la dosificación
+    if (mqttClient && mqttClient.connected) {
+      const topicComandos = `${process.env.MQTT_TOPIC_BASE}/comandos`;
+      const comando = {
+        accion: 'dosificar',
+        tipo: accion.tipo,
+        cantidad: accion.cantidad,
+        unidad: accion.unidad,
+        eventId: evento._id.toString(),
+        modo: modo,
+        ts: Date.now(),
+      };
+      mqttClient.publish(topicComandos, JSON.stringify(comando));
+      console.log(`📤 Comando manual publicado:`, comando);
+    }
 
     res.json({
       ok: true,
@@ -339,41 +484,12 @@ app.post('/api/dosing', verificarToken, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
-// RUTAS DEL ESP32
+// RUTAS DEL ESP32 (HTTP - respaldo)
 // ═══════════════════════════════════════════
-// El ESP32 consulta si hay dosificaciones manuales pendientes de ejecutar
-app.get('/api/esp32/pending-actions', verificarDispositivo, async (req, res) => {
-  try {
-    const userId = process.env.DEVICE_OWNER_ID;
-    
-    // Buscar el evento de dosificación más antiguo que aún no haya sido ejecutado
-    const evento = await DosingEvent.findOne({ 
-      userId, 
-      ejecutado: false 
-    }).sort({ createdAt: 1 }); 
-    
-    if (evento) {
-      res.json({ 
-        ok: true, 
-        accion: {
-          id: evento._id.toString(),
-          tipo: evento.tipo,
-          cantidad: evento.cantidad,
-          unidad: evento.unidad
-        }
-      });
-    } else {
-      res.json({ ok: true, accion: null });
-    }
-  } catch (err) {
-    console.error('Error en pending-actions:', err);
-    res.status(500).json({ error: 'Error del servidor.' });
-  }
-});
 
 app.post('/api/esp32/medicion', deviceLimiter, verificarDispositivo, async (req, res) => {
   try {
-    const { ph, temperatura } = req.body;
+    const { ph, temperatura, id } = req.body;
 
     if (typeof ph !== 'number' || typeof temperatura !== 'number') {
       return res.status(400).json({ error: 'Campos ph y temperatura requeridos (numéricos).' });
@@ -382,17 +498,20 @@ app.post('/api/esp32/medicion', deviceLimiter, verificarDispositivo, async (req,
       return res.status(400).json({ error: 'Valores fuera de rango.' });
     }
 
-    const userId = process.env.DEVICE_OWNER_ID;
-    const cloro = simularCloro(temperatura);
-
-    const medicion = await Measurement.create({
-      userId, ph, cloro, temperatura, origen: 'esp32',
+    const resultado = await procesarMedicion({
+      ph,
+      temperatura,
+      esp32Id: id || null,
+      origen: 'esp32_http',
     });
 
-    const pool = await Pool.findOne({ userId });
-    const accion = await evaluarYdosificar(userId, medicion, pool);
-
-    res.json({ ok: true, medicionId: medicion._id, cloro, accion });
+    res.json({
+      ok: true,
+      medicionId: resultado.medicion._id,
+      cloro: resultado.medicion.cloro,
+      accion: resultado.accion,
+      duplicada: resultado.duplicada,
+    });
   } catch (err) {
     console.error('esp32/medicion:', err);
     res.status(500).json({ error: 'Error del servidor.' });
@@ -403,7 +522,7 @@ app.post('/api/esp32/dosing/:id/confirm', deviceLimiter, verificarDispositivo, a
   try {
     const evento = await DosingEvent.findByIdAndUpdate(
       req.params.id,
-      { ejecutado: true },
+      { ejecutado: true, ejecutadoEn: new Date() },
       { new: true }
     );
     if (!evento) return res.status(404).json({ error: 'Evento no encontrado.' });
@@ -422,6 +541,7 @@ app.get('/api/health', (_req, res) => {
     ok: true,
     uptime: process.uptime(),
     mongo: mongoose.connection.readyState === 1 ? 'conectado' : 'desconectado',
+    mqtt: mqttClient && mqttClient.connected ? 'conectado' : 'desconectado',
   });
 });
 
@@ -451,4 +571,8 @@ app.use((err, _req, res, _next) => {
 // ═══════════════════════════════════════════
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Servidor corriendo en puerto ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
+  // Iniciar MQTT después de que el server arranque
+  iniciarMQTT();
+});
