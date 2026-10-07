@@ -8,6 +8,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
+
   <!-- Fondo animado -->
   <div class="water-bg" id="water-bg">
     <div class="wave wave-1"></div>
@@ -43,7 +44,10 @@
           </div>
           <button type="submit" class="btn-primary">Ingresar al sistema</button>
           <div class="error-msg" id="login-error">Correo o contraseña incorrectos.</div>
-          <div class="demo-hint">Demo: <span>demo@aquasmart.com</span> / <span>aqua1234</span></div>
+          <button type="button" class="btn-demo" onclick="loginDemo()">
+  <i data-lucide="sparkles" style="width:14px;height:14px;"></i>
+  Probar con cuenta demo
+</button>
         </form>
 
         <form id="register-form" style="display:none;" onsubmit="doRegister(event)">
@@ -115,6 +119,8 @@
     </aside>
 
     <main class="main-content">
+
+      <!-- ═══ TOPBAR ═══ -->
       <div class="topbar">
         <div style="display:flex;align-items:center;gap:16px;">
           <button class="hamburger-btn" onclick="toggleSidebar()">
@@ -122,16 +128,18 @@
           </button>
           <div>
             <div class="page-title">Panel de control</div>
-            <div class="page-subtitle">Monitoreo en tiempo real · Última actualización: ahora</div>
+            <div class="page-subtitle" id="dashboard-subtitle">Monitoreo en tiempo real · Última actualización: ahora</div>
           </div>
         </div>
-        <div class="status-pill">
-          <div class="status-dot"></div>
-          ESP32 conectado
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <div class="status-pill" id="esp32-status-pill">
+            <div class="status-dot" id="esp32-status-dot"></div>
+            <span id="esp32-status-text">Verificando...</span>
+          </div>
         </div>
       </div>
 
-      <!-- ══ DASHBOARD ═══ -->
+      <!-- ═══ DASHBOARD ═══ -->
       <section id="section-dashboard">
         <div class="cards-grid">
           <div class="metric-card ok">
@@ -191,19 +199,21 @@
 
         <!-- Panel de dosificación -->
         <div class="pool-panel">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
             <div>
               <div class="chart-title">Control de dosificación</div>
-              <div class="chart-subtitle">Modo manual o automático</div>
+              <div class="chart-subtitle" id="modo-descripcion">Cargando modo...</div>
             </div>
-            <div style="display:flex;align-items:center;gap:10px;">
-              <span style="font-size:13px;color:var(--text-secondary);">Automático</span>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <span style="font-size:13px;font-weight:600;color:var(--text-primary);" id="modo-label">—</span>
               <label class="toggle-switch">
-                <input type="checkbox" id="auto-mode" />
+                <input type="checkbox" id="auto-mode" onchange="cambiarModo()" />
                 <span class="toggle-slider"></span>
               </label>
             </div>
           </div>
+
+          <div id="modo-aviso" style="margin-top:14px;padding:12px;border-radius:10px;display:none;font-size:12px;line-height:1.5;"></div>
 
           <div class="dosage-buttons-grid">
             <button class="dosage-btn ph-up" onclick="dosificar('ph_subir', event)">
@@ -260,13 +270,6 @@
                 </div>
               </div>
             </div>
-            <div style="margin-top:16px;padding:12px;background:rgba(0,200,224,0.08);border:1px solid rgba(0,200,224,0.2);border-radius:10px;">
-              <div style="font-size:12px;color:var(--aqua);font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px;">
-                <i data-lucide="mail" style="width:12px;height:12px;"></i>
-                Próxima alerta por correo
-              </div>
-              <div style="font-size:13px;color:var(--text-primary);">14:30 hs — Se enviará notificación</div>
-            </div>
           </div>
         </div>
 
@@ -276,69 +279,73 @@
         </div>
       </section>
 
-      <!-- ═══ PISCINA ═══ -->
-      <section id="section-piscina" style="display:none;">
-        <div class="pool-panel">
-          <div class="chart-title">Mi Piscina</div>
-          <div class="chart-subtitle">Configuración y cálculo de volumen</div>
+     <!-- ═══ MI PISCINA ═══ -->
+<section id="section-piscina" style="display:none;">
+  <div class="pool-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+      <div>
+        <div class="chart-title">Mi Piscina</div>
+        <div class="chart-subtitle">Configuración y cálculo de volumen</div>
+      </div>
+      <button class="btn-save-pool" id="btn-save-pool" onclick="guardarDimensiones()">
+        <i data-lucide="save" style="width:14px;height:14px;"></i>
+        Guardar dimensiones
+      </button>
+    </div>
 
-          <div style="margin-top:20px;">
-            <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:12px;">Dimensiones de la piscina</div>
-            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;">Ingresá las medidas para calcular el volumen automáticamente</div>
+    <div>
+      <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:12px;">Dimensiones de la piscina</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;">Modificá las medidas y apretá "Guardar" para aplicar los cambios</div>
 
-            <div class="pool-input-row">
-              <div>
-                <div class="pool-input-label">Largo (m)</div>
-                <input id="pool-largo" type="number" class="pool-input" placeholder="0" oninput="calcVol()" />
-              </div>
-              <div>
-                <div class="pool-input-label">Ancho (m)</div>
-                <input id="pool-ancho" type="number" class="pool-input" placeholder="0" oninput="calcVol()" />
-              </div>
-              <div>
-                <div class="pool-input-label">Prof. promedio (m)</div>
-                <input id="pool-prof" type="number" class="pool-input" placeholder="0" oninput="calcVol()" />
-              </div>
-            </div>
-
-            <div class="pool-volume" id="pool-volume-text">
-              Ingresá las dimensiones para calcular el volumen
-            </div>
-          </div>
-
-          <div style="margin-top:24px;">
-            <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:12px;">Dosificación recomendada</div>
-            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;">Basada en el volumen y el pH actual</div>
-
-            <div class="dosage-row">
-              <div class="dosage-item">
-                <div class="dosage-name">ÁCIDO MURIÁTICO (pH bajo)</div>
-                <div class="dosage-val">0 <span class="dosage-unit">ml</span></div>
-                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">pH actual en rango — sin necesidad</div>
-              </div>
-              <div class="dosage-item">
-                <div class="dosage-name">BICARBONATO (pH alto)</div>
-                <div class="dosage-val">0 <span class="dosage-unit">g</span></div>
-                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">pH actual en rango — sin necesidad</div>
-              </div>
-            </div>
-          </div>
+      <div class="pool-input-row">
+        <div>
+          <div class="pool-input-label">Largo (m)</div>
+          <input id="pool-largo" type="number" class="pool-input" placeholder="0" step="0.1" oninput="calcVol()" />
         </div>
-      </section>
+        <div>
+          <div class="pool-input-label">Ancho (m)</div>
+          <input id="pool-ancho" type="number" class="pool-input" placeholder="0" step="0.1" oninput="calcVol()" />
+        </div>
+        <div>
+          <div class="pool-input-label">Prof. promedio (m)</div>
+          <input id="pool-prof" type="number" class="pool-input" placeholder="0" step="0.1" oninput="calcVol()" />
+        </div>
+      </div>
+
+      <div class="pool-volume" id="pool-volume-text">
+        Ingresá las dimensiones para calcular el volumen
+      </div>
+
+      <div id="pool-save-feedback" style="display:none;margin-top:12px;padding:10px 14px;border-radius:10px;font-size:13px;font-weight:500;"></div>
+    </div>
+  </div>
+
+  <!-- Dosificación recomendada (dinámica) -->
+  <div class="pool-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+      <div>
+        <div class="chart-title">Dosificación recomendada</div>
+        <div class="chart-subtitle" id="dosificacion-subtitle">Basada en el volumen actual y el último pH medido</div>
+      </div>
+      <button class="btn-refresh" onclick="actualizarDosificacionRecomendada()">
+        <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i>
+        Recalcular
+      </button>
+    </div>
+
+    <div id="dosificacion-recomendada-content" style="margin-top:20px;">
+      <div style="text-align:center;padding:24px;color:var(--text-secondary);font-size:13px;">
+        Cargando datos...
+      </div>
+    </div>
+  </div>
+</section>
 
       <!-- ═══ HISTORIAL ═══ -->
       <section id="section-historial" style="display:none;">
         <div class="chart-card">
           <div class="chart-title">Historial</div>
           <div class="chart-subtitle">Registro de mediciones y dosificaciones</div>
-
-          <div style="margin-top:20px;">
-            <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:12px;">pH — últimos 7 días</div>
-            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;">Rangos óptimos marcados en verde</div>
-            <div class="mini-chart">
-              <svg id="ph-chart-7d" class="chart-svg" viewBox="0 0 600 160" preserveAspectRatio="none"></svg>
-            </div>
-          </div>
 
           <div style="margin-top:24px;">
             <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:16px;">Registro de dosificaciones</div>
@@ -360,71 +367,103 @@
         </div>
       </section>
 
-      <!-- ═══ ALERTAS ══ -->
+      <!-- ═══ ALERTAS ═══ -->
       <section id="section-alertas" style="display:none;">
         <div class="alerts-card">
-          <div class="chart-title">Alertas</div>
-          <div class="chart-subtitle">Notificaciones del sistema</div>
-          <div id="alertas-list" style="margin-top:16px;"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+            <div>
+              <div class="chart-title">Alertas</div>
+              <div class="chart-subtitle">Sistema de monitoreo inteligente</div>
+            </div>
+            <div class="alerts-tabs">
+              <button class="alerts-tab active" data-tab="activas" onclick="cambiarTabAlertas('activas')">
+                Activas <span class="alerts-count" id="count-activas">0</span>
+              </button>
+              <button class="alerts-tab" data-tab="historial" onclick="cambiarTabAlertas('historial')">
+                Historial <span class="alerts-count" id="count-historial">0</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="alertas-activas"></div>
+          <div id="alertas-historial" style="display:none;"></div>
         </div>
       </section>
 
-      <!-- ═══ IA ═══ -->
+      <!-- ═══ IA & REPORTES ═══ -->
       <section id="section-ia" style="display:none;">
-        <div class="chart-card">
-          <div class="chart-title">IA & Reportes</div>
-          <div class="chart-subtitle">Análisis inteligente del agua</div>
 
-          <div style="margin-top:20px;">
-            <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:16px;">Reporte mensual — Mayo 2025</div>
-            <div class="cards-grid">
-              <div class="metric-card ok">
-                <div class="metric-label">pH promedio mensual</div>
-                <div class="metric-value">7.18</div>
-                <div class="metric-status ok">
-                  <i data-lucide="check-circle" style="width:12px;height:12px;"></i>
-                  Dentro del rango óptimo
-                </div>
-              </div>
-              <div class="metric-card info">
-                <div class="metric-label">Dosificaciones totales</div>
-                <div class="metric-value">47</div>
-                <div class="metric-status" style="color:var(--text-secondary);">35 ácido · 12 base</div>
-              </div>
-              <div class="metric-card warn">
-                <div class="metric-label">Cloro estimado prom.</div>
-                <div class="metric-value">1.6<span class="metric-unit"> ppm</span></div>
-                <div class="metric-status warn">
-                  <i data-lucide="alert-triangle" style="width:12px;height:12px;"></i>
-                  Ligeramente bajo
-                </div>
-              </div>
-              <div class="metric-card ok">
-                <div class="metric-label">Temp. promedio</div>
-                <div class="metric-value">23.4<span class="metric-unit">°C</span></div>
-                <div class="metric-status ok">
-                  <i data-lucide="check-circle" style="width:12px;height:12px;"></i>
-                  Confortable
-                </div>
-              </div>
+        <div class="chart-card" style="margin-bottom:24px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+            <div>
+              <div class="chart-title">Recomendaciones IA</div>
+              <div class="chart-subtitle">Análisis estadístico basado en tus datos</div>
+            </div>
+            <button class="btn-refresh" onclick="cargarRecomendaciones()">
+              <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i>
+              Recalcular
+            </button>
+          </div>
+          <div id="recomendaciones-list" style="margin-top:16px;"></div>
+        </div>
+
+        <div class="chart-card" style="margin-bottom:24px;">
+          <div class="chart-title">Dosificaciones del mes</div>
+          <div class="chart-subtitle" id="mes-actual">Cargando...</div>
+
+          <div class="monthly-summary" id="monthly-summary">
+            <div class="summary-card acido">
+              <div class="summary-label">Ácido</div>
+              <div class="summary-value" id="total-acido">0 <span class="summary-unit">ml</span></div>
+            </div>
+            <div class="summary-card base">
+              <div class="summary-label">Base</div>
+              <div class="summary-value" id="total-base">0 <span class="summary-unit">g</span></div>
+            </div>
+            <div class="summary-card cloro">
+              <div class="summary-label">Cloro</div>
+              <div class="summary-value" id="total-cloro">0 <span class="summary-unit">g</span></div>
+            </div>
+            <div class="summary-card eventos">
+              <div class="summary-label">Total eventos</div>
+              <div class="summary-value" id="total-eventos">0</div>
             </div>
           </div>
 
-          <div style="margin-top:24px;padding:20px;background:linear-gradient(135deg,rgba(0,200,224,0.08),rgba(0,102,170,0.08));border:1px solid rgba(0,200,224,0.2);border-radius:12px;">
-            <div style="display:flex;gap:16px;">
-              <div style="flex-shrink:0;">
-                <i data-lucide="brain" style="width:32px;height:32px;color:var(--aqua);"></i>
-              </div>
-              <div>
-                <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:8px;">Análisis IA</div>
-                <div style="font-size:13px;color:var(--text-primary);line-height:1.6;">
-                  La piscina mantuvo condiciones estables durante mayo. Se detectaron 3 episodios de pH elevado (&gt;8.0) relacionados con días de alta temperatura. Se recomienda incrementar la frecuencia de dosificación de cloro para el mes de junio. El sistema dosificó automáticamente en el 94% de los eventos, sin necesidad de intervención manual.
-                </div>
-              </div>
+          <div class="monthly-chart-wrap">
+            <div class="monthly-legend">
+              <span class="legend-item"><span class="legend-dot" style="background:var(--red-alert);"></span> Ácido</span>
+              <span class="legend-item"><span class="legend-dot" style="background:var(--green-ok);"></span> Base</span>
+              <span class="legend-item"><span class="legend-dot" style="background:#FFD700;"></span> Cloro</span>
+            </div>
+            <div class="monthly-chart" id="monthly-chart"></div>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-title">Resumen del mes</div>
+          <div class="chart-subtitle">Estadísticas generales</div>
+          <div class="cards-grid" style="margin-top:20px;">
+            <div class="metric-card info">
+              <div class="metric-label">Promedio diario</div>
+              <div class="metric-value" id="promedio-diario">0</div>
+              <div class="metric-status" style="color:var(--text-secondary);">dosificaciones por día</div>
+            </div>
+            <div class="metric-card ok">
+              <div class="metric-label">Día más activo</div>
+              <div class="metric-value" id="dia-mas-activo">—</div>
+              <div class="metric-status" id="dia-mas-activo-detalle" style="color:var(--text-secondary);">—</div>
+            </div>
+            <div class="metric-card info">
+              <div class="metric-label">Tipo más usado</div>
+              <div class="metric-value" id="tipo-mas-usado" style="text-transform:capitalize;">—</div>
+              <div class="metric-status" style="color:var(--text-secondary);">durante este mes</div>
             </div>
           </div>
         </div>
+
       </section>
+
     </main>
   </div>
 

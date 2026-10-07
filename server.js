@@ -14,8 +14,11 @@ const mqtt = require('mqtt');
 
 const User = require('./models/User');
 const Pool = require('./models/Pool');
+const Alert = require('./models/Alert');
 const Measurement = require('./models/Measurement');
 const DosingEvent = require('./models/DosingEvent');
+const { generarRecomendaciones } = require('./utils/recommendationEngine');
+const { evaluarAlertas, chequearESP32Inactivo } = require('./utils/alertEngine');
 const { verificarToken, verificarDispositivo } = require('./middleware/auth');
 
 // ── Validaciones de entorno ──
@@ -81,7 +84,7 @@ function simularCloro(temperatura) {
   return +Math.max(0, base + efectoTemp + ruido).toFixed(2);
 }
 
-async function evaluarYdosificar(userId, medicion, pool) {
+async function evaluarYdosificar(userId, medicion, pool, modo = 'automatico') {
   const { ph } = medicion;
   const volumen = pool ? pool.volumen : 10;
 
@@ -114,8 +117,8 @@ async function evaluarYdosificar(userId, medicion, pool) {
     cantidad,
     unidad,
     motivo,
-    modo: 'automatico',
-    origen: 'automatico_esp32',
+    modo,
+    origen: modo === 'automatico' ? 'automatico_esp32' : 'manual_web',
   });
 
   return {
@@ -135,7 +138,7 @@ async function procesarMedicion({ ph, temperatura, esp32Id, origen }) {
   const userId = process.env.DEVICE_OWNER_ID;
   const cloro = simularCloro(temperatura);
 
-  // Deduplicación: si ya existe una medición con este esp32Id, no la guardamos de nuevo
+  // Deduplicación
   if (esp32Id) {
     const existente = await Measurement.findOne({ esp32Id, userId });
     if (existente) {
@@ -144,6 +147,7 @@ async function procesarMedicion({ ph, temperatura, esp32Id, origen }) {
     }
   }
 
+  // Guardar medición (SIEMPRE, en ambos modos)
   const medicion = await Measurement.create({
     userId,
     ph,
@@ -153,11 +157,15 @@ async function procesarMedicion({ ph, temperatura, esp32Id, origen }) {
     esp32Id,
   });
 
-  const pool = await Pool.findOne({ userId });
-  const accion = await evaluarYdosificar(userId, medicion, pool);
+  // Leer modo del usuario
+  const user = await User.findById(userId).select('modo');
+  const modo = user?.modo || 'automatico';
 
-  // Si hay acción y es automática, la publicamos por MQTT para que el ESP32 la ejecute
-  if (accion && mqttClient && mqttClient.connected) {
+  const pool = await Pool.findOne({ userId });
+  const accion = await evaluarYdosificar(userId, medicion, pool, modo);
+
+  // Publicar comando MQTT solo si estamos en AUTOMÁTICO
+  if (accion && modo === 'automatico' && mqttClient && mqttClient.connected) {
     const topicComandos = `${process.env.MQTT_TOPIC_BASE}/comandos`;
     const comando = {
       accion: 'dosificar',
@@ -165,13 +173,19 @@ async function procesarMedicion({ ph, temperatura, esp32Id, origen }) {
       cantidad: accion.cantidad,
       unidad: accion.unidad,
       eventId: accion.eventId.toString(),
+      modo: 'automatico',
       ts: Date.now(),
     };
     mqttClient.publish(topicComandos, JSON.stringify(comando));
-    console.log(`📤 Comando publicado en ${topicComandos}:`, comando);
+    console.log(`🤖 Comando AUTOMÁTICO publicado:`, comando);
+  } else if (accion && modo === 'manual') {
+    console.log(`🔧 Modo MANUAL: dosificación registrada pero NO ejecutada automáticamente`);
   }
 
-  return { medicion, accion, duplicada: false };
+  // Evaluar alertas (SIEMPRE, en ambos modos)
+  await evaluarAlertas(userId, medicion);
+
+  return { medicion, accion, duplicada: false, modo };
 }
 
 // ═══════════════════════════════════════════
@@ -213,7 +227,6 @@ function iniciarMQTT() {
       const data = JSON.parse(message.toString());
       console.log(`📥 MQTT [${topic}]:`, data);
 
-      // Validaciones
       if (typeof data.ph !== 'number' || typeof data.temperatura !== 'number') {
         console.warn('⚠️  Datos inválidos, ignorando');
         return;
@@ -246,6 +259,140 @@ function iniciarMQTT() {
     console.log('⚠️  MQTT offline');
   });
 }
+
+// ═══════════════════════════════════════════
+// RUTAS DE ALERTAS
+// ═══════════════════════════════════════════
+
+app.get('/api/alerts', verificarToken, async (req, res) => {
+  try {
+    const alerts = await Alert.find({ userId: req.userId, estado: 'activa' })
+      .sort({ createdAt: -1 }).limit(50);
+    res.json({ ok: true, alerts });
+  } catch (err) {
+    res.status(500).json({ error: 'Error del servidor.' });
+  }
+});
+
+app.get('/api/alerts/history', verificarToken, async (req, res) => {
+  try {
+    const alerts = await Alert.find({ userId: req.userId })
+      .sort({ createdAt: -1 }).limit(200);
+    res.json({ ok: true, alerts });
+  } catch (err) {
+    res.status(500).json({ error: 'Error del servidor.' });
+  }
+});
+
+app.post('/api/alerts/:id/resolve', verificarToken, async (req, res) => {
+  try {
+    const alert = await Alert.findOneAndUpdate(
+      { _id: req.params.id, userId: req.userId },
+      { estado: 'resuelta', resueltaEn: new Date(), resueltaPor: 'usuario' },
+      { new: true }
+    );
+    if (!alert) return res.status(404).json({ error: 'Alerta no encontrada.' });
+    res.json({ ok: true, alert });
+  } catch (err) {
+    res.status(500).json({ error: 'Error del servidor.' });
+  }
+});
+
+// ═══════════════════════════════════════════
+// RUTAS DE IA
+// ═══════════════════════════════════════════
+
+app.get('/api/ia/recommendations', verificarToken, async (req, res) => {
+  try {
+    const recomendaciones = await generarRecomendaciones(req.userId);
+    res.json({ ok: true, recomendaciones });
+  } catch (err) {
+    res.status(500).json({ error: 'Error del servidor.' });
+  }
+});
+
+app.get('/api/ia/monthly-report', verificarToken, async (req, res) => {
+  try {
+    const ahora = new Date();
+    const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+
+    const eventos = await DosingEvent.find({
+      userId: req.userId,
+      createdAt: { $gte: inicioMes },
+    }).sort({ createdAt: 1 });
+
+    const porDia = {};
+    eventos.forEach(e => {
+      const dia = new Date(e.createdAt).getDate();
+      if (!porDia[dia]) porDia[dia] = { acido: 0, base: 0, cloro: 0 };
+      porDia[dia][e.tipo] += e.cantidad;
+    });
+
+    res.json({
+      ok: true,
+      mes: ahora.toLocaleString('es-AR', { month: 'long', year: 'numeric' }),
+      totales: {
+        acido: eventos.filter(e => e.tipo === 'acido').reduce((a, e) => a + e.cantidad, 0),
+        base: eventos.filter(e => e.tipo === 'base').reduce((a, e) => a + e.cantidad, 0),
+        cloro: eventos.filter(e => e.tipo === 'cloro').reduce((a, e) => a + e.cantidad, 0),
+      },
+      porDia,
+      totalEventos: eventos.length,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Error del servidor.' });
+  }
+});
+
+app.post('/api/ia/recommendations/execute', verificarToken, async (req, res) => {
+  try {
+    const { tipo, cantidad, unidad, motivo } = req.body;
+    const userId = req.userId;
+
+    if (!tipo || !cantidad || !unidad) {
+      return res.status(400).json({ ok: false, error: 'Datos incompletos.' });
+    }
+    if (!['ph_subir', 'ph_bajar', 'cloro'].includes(tipo)) {
+      return res.status(400).json({ ok: false, error: 'Tipo inválido.' });
+    }
+    if (cantidad <= 0 || cantidad > 5000) {
+      return res.status(400).json({ ok: false, error: 'Cantidad fuera de rango.' });
+    }
+
+    const tipoInterno = tipo === 'ph_subir' ? 'base' : tipo === 'ph_bajar' ? 'acido' : 'cloro';
+
+    const evento = await DosingEvent.create({
+      userId,
+      tipo: tipoInterno,
+      cantidad,
+      unidad,
+      motivo: motivo || 'Ejecutado desde recomendación IA',
+      modo: 'manual',
+      origen: 'manual_web',
+      ejecutado: false,
+    });
+
+    if (mqttClient && mqttClient.connected) {
+      const topicComandos = `${process.env.MQTT_TOPIC_BASE}/comandos`;
+      const comando = {
+        accion: 'dosificar',
+        tipo: tipoInterno,
+        cantidad,
+        unidad,
+        eventId: evento._id.toString(),
+        modo: 'manual',
+        ts: Date.now(),
+      };
+      mqttClient.publish(topicComandos, JSON.stringify(comando));
+      console.log(`🤖 Comando IA/manual publicado:`, comando);
+    }
+
+    res.json({ ok: true, evento });
+  } catch (err) {
+    console.error('Error en ejecutar recomendación:', err);
+    res.status(500).json({ ok: false, error: 'Error del servidor.' });
+  }
+});
 
 // ═══════════════════════════════════════════
 // RUTAS DE AUTENTICACIÓN
@@ -449,7 +596,6 @@ app.post('/api/dosing', verificarToken, async (req, res) => {
       ejecutado: false,
     });
 
-    // Publicar comando MQTT para que el ESP32 ejecute la dosificación
     if (mqttClient && mqttClient.connected) {
       const topicComandos = `${process.env.MQTT_TOPIC_BASE}/comandos`;
       const comando = {
@@ -484,6 +630,35 @@ app.post('/api/dosing', verificarToken, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
+// RUTAS DE MODO (manual/automático)
+// ═══════════════════════════════════════════
+
+app.get('/api/mode', verificarToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).select('modo');
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
+    res.json({ ok: true, modo: user.modo || 'automatico' });
+  } catch (err) {
+    res.status(500).json({ error: 'Error del servidor.' });
+  }
+});
+
+app.put('/api/mode', verificarToken, async (req, res) => {
+  try {
+    const { modo } = req.body;
+    if (!['manual', 'automatico'].includes(modo)) {
+      return res.status(400).json({ error: 'Modo inválido.' });
+    }
+    const user = await User.findByIdAndUpdate(req.userId, { modo }, { new: true }).select('modo');
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
+    console.log(`🔧 Modo cambiado a: ${modo}`);
+    res.json({ ok: true, modo: user.modo });
+  } catch (err) {
+    res.status(500).json({ error: 'Error del servidor.' });
+  }
+});
+
+// ═══════════════════════════════════════════
 // RUTAS DEL ESP32 (HTTP - respaldo)
 // ═══════════════════════════════════════════
 
@@ -511,6 +686,7 @@ app.post('/api/esp32/medicion', deviceLimiter, verificarDispositivo, async (req,
       cloro: resultado.medicion.cloro,
       accion: resultado.accion,
       duplicada: resultado.duplicada,
+      modo: resultado.modo,
     });
   } catch (err) {
     console.error('esp32/medicion:', err);
@@ -573,6 +749,13 @@ app.use((err, _req, res, _next) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
-  // Iniciar MQTT después de que el server arranque
   iniciarMQTT();
 });
+
+// Chequeo periódico de ESP32 inactivo cada 2 minutos
+setInterval(async () => {
+  const userId = process.env.DEVICE_OWNER_ID;
+  if (userId) {
+    await chequearESP32Inactivo(userId);
+  }
+}, 2 * 60 * 1000);
