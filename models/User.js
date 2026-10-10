@@ -5,6 +5,7 @@ const userSchema = new mongoose.Schema({
   email:    { type: String, required: true, unique: true, lowercase: true, trim: true, index: true },
   password: { type: String, required: true },
   modo:     { type: String, enum: ['manual', 'automatico'], default: 'automatico' },
+  activo:   { type: Boolean, default: true },   // ⚡ NUEVO
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);

@@ -103,19 +103,25 @@
         <i data-lucide="brain" class="icon"></i><span>IA & Reportes</span>
       </div>
 
-      <div class="sidebar-bottom">
-        <div class="user-chip">
-          <div class="user-avatar" id="sidebar-avatar">S</div>
-          <div class="user-info">
-            <div class="user-name" id="sidebar-name">Simón</div>
-            <div class="user-email" id="sidebar-email">demo@aquasmart.com</div>
-          </div>
-        </div>
-        <button class="logout-btn" onclick="doLogout()">
-          <i data-lucide="log-out" style="width:14px;height:14px;"></i>
-          Cerrar sesión
-        </button>
-      </div>
+     <div class="sidebar-bottom">
+  <!-- ⚡ BOTÓN DE APAGAR/ENCENDER SISTEMA -->
+  <button class="btn-toggle-system" id="btn-toggle-system" onclick="toggleSistema()">
+    <i data-lucide="power" style="width:16px;height:16px;"></i>
+    <span id="btn-toggle-system-text">Apagar sistema</span>
+  </button>
+
+  <div class="user-chip">
+    <div class="user-avatar" id="sidebar-avatar">S</div>
+    <div class="user-info">
+      <div class="user-name" id="sidebar-name">Simón</div>
+      <div class="user-email" id="sidebar-email">demo@aquasmart.com</div>
+    </div>
+  </div>
+  <button class="logout-btn" onclick="doLogout()">
+    <i data-lucide="log-out" style="width:14px;height:14px;"></i>
+    Cerrar sesión
+  </button>
+</div>
     </aside>
 
     <main class="main-content">
@@ -252,27 +258,32 @@
           </div>
 
           <div class="chart-card">
-            <div class="chart-title">Dosificaciones hoy</div>
-            <div class="chart-subtitle">Activaciones automáticas</div>
-            <div class="dosage-row">
-              <div class="dosage-item">
-                <div class="dosage-name">Ácido (pH↓)</div>
-                <div class="dosage-val">3 <span class="dosage-unit">veces</span></div>
-                <div class="dosage-progress">
-                  <div class="dosage-fill" style="width:60%;background:var(--yellow-warn);"></div>
-                </div>
-              </div>
-              <div class="dosage-item">
-                <div class="dosage-name">Base (pH↑)</div>
-                <div class="dosage-val">1 <span class="dosage-unit">vez</span></div>
-                <div class="dosage-progress">
-                  <div class="dosage-fill" style="width:20%;background:var(--aqua);"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
+  <div class="chart-title">Dosificaciones hoy</div>
+  <div class="chart-subtitle" id="dosificaciones-subtitle">Cargando...</div>
+  <div class="dosage-row">
+    <div class="dosage-item">
+      <div class="dosage-name">Ácido (pH↓)</div>
+      <div class="dosage-val"><span id="dosis-acido-count">0</span> <span class="dosage-unit" id="dosis-acido-label">veces</span></div>
+      <div class="dosage-progress">
+        <div class="dosage-fill" id="dosis-acido-bar" style="width:0%;background:var(--yellow-warn);"></div>
+      </div>
+    </div>
+    <div class="dosage-item">
+      <div class="dosage-name">Base (pH↑)</div>
+      <div class="dosage-val"><span id="dosis-base-count">0</span> <span class="dosage-unit" id="dosis-base-label">veces</span></div>
+      <div class="dosage-progress">
+        <div class="dosage-fill" id="dosis-base-bar" style="width:0%;background:var(--aqua);"></div>
+      </div>
+    </div>
+    <div class="dosage-item">
+      <div class="dosage-name">Cloro</div>
+      <div class="dosage-val"><span id="dosis-cloro-count">0</span> <span class="dosage-unit" id="dosis-cloro-label">veces</span></div>
+      <div class="dosage-progress">
+        <div class="dosage-fill" id="dosis-cloro-bar" style="width:0%;background:#FFD700;"></div>
+      </div>
+    </div>
+  </div>
+</div>
         <div class="alerts-card">
           <div class="chart-title" style="margin-bottom:16px;">Actividad reciente</div>
           <div id="actividad-reciente"></div>

@@ -11,9 +11,11 @@
   }
 })();
 
+let sistemaActivo = true;
 let currentUser = null;
 let liveInterval = null;
 let statusInterval = null;
+let chartInterval = null;
 let modoActual = 'automatico';
 let ultimoDosingId = null;
 let dosingCheckInterval = null;
@@ -204,6 +206,7 @@ function doLogout() {
   if (alertInterval) clearInterval(alertInterval);
   if (iaInterval) clearInterval(iaInterval);
   if (dosingCheckInterval) clearInterval(dosingCheckInterval);
+  if (chartInterval) clearInterval(chartInterval);
 }
 
 // ── Launch app ──
@@ -224,9 +227,11 @@ async function launchApp(user) {
     loadHistorial(),
     buildAlertas(),
     buildActividadReciente(),
+    actualizarDosificacionesHoy(),
     cargarRecomendaciones(),
     cargarReporteMensual(),
     cargarModo(),
+    cargarEstadoSistema(),
   ]);
   refreshIcons();
   startLiveData();
@@ -273,10 +278,75 @@ function closeSidebar() {
 }
 
 // ── Charts ──
-function initCharts() {
+async function initCharts() {
+  await dibujarGraficoPH24h();
+}
+
+async function dibujarGraficoPH24h() {
   const svg = document.getElementById('ph-chart');
-  const data = [7.1, 7.3, 7.6, 7.8, 8.1, 7.5, 7.3, 7.2, 7.4, 7.3, 7.1, 7.0, 7.2, 7.3, 7.2, 7.4, 7.5, 7.3, 7.2, 7.1, 7.3, 7.4, 7.3, 7.2];
-  drawLine(svg, data, 6.5, 8.5, 500, 120);
+  if (!svg) return;
+
+  // Mostrar estado de carga
+  svg.innerHTML = `
+    <text x="250" y="60" text-anchor="middle" fill="var(--text-secondary)" font-size="12" font-family="Inter">
+      Cargando datos...
+    </text>
+  `;
+
+  try {
+    const res = await authFetch('/api/measurements?horas=24');
+    const data = await res.json();
+
+    if (!data.ok || !data.mediciones || data.mediciones.length === 0) {
+      svg.innerHTML = `
+        <text x="250" y="55" text-anchor="middle" fill="var(--text-secondary)" font-size="12" font-family="Inter">
+          Sin datos suficientes todavía
+        </text>
+        <text x="250" y="75" text-anchor="middle" fill="var(--text-secondary)" font-size="10" font-family="Inter">
+          El gráfico se va a llenar con las mediciones del ESP32
+        </text>
+      `;
+      return;
+    }
+
+    // Ordenar de más antigua a más nueva
+    const mediciones = [...data.mediciones].reverse();
+
+    // Extraer los pH
+    const phs = mediciones.map(m => m.ph);
+
+    // Si hay muy pocos datos, mostrar aviso
+    if (phs.length < 2) {
+      svg.innerHTML = `
+        <text x="250" y="55" text-anchor="middle" fill="var(--text-secondary)" font-size="12" font-family="Inter">
+          Esperando más mediciones...
+        </text>
+        <text x="250" y="75" text-anchor="middle" fill="var(--text-secondary)" font-size="10" font-family="Inter">
+          (${phs.length} de 2 mínimas)
+        </text>
+      `;
+      return;
+    }
+
+    // Dibujar
+    drawLine(svg, phs, 6.5, 8.5, 500, 120);
+
+    // Actualizar subtítulo con info real
+    const subtitle = document.querySelector('#section-dashboard .chart-card .chart-subtitle');
+    if (subtitle && subtitle.textContent.includes('Rango óptimo')) {
+      const phMin = Math.min(...phs).toFixed(2);
+      const phMax = Math.max(...phs).toFixed(2);
+      const phProm = (phs.reduce((a, b) => a + b, 0) / phs.length).toFixed(2);
+      subtitle.textContent = `${phs.length} mediciones · mín ${phMin} · máx ${phMax} · prom ${phProm}`;
+    }
+  } catch (err) {
+    console.error('Error en dibujarGraficoPH24h:', err);
+    svg.innerHTML = `
+      <text x="250" y="60" text-anchor="middle" fill="var(--red-alert)" font-size="12" font-family="Inter">
+        Error al cargar datos
+      </text>
+    `;
+  }
 }
 
 function drawLine(svg, data, min, max, W, H) {
@@ -903,6 +973,62 @@ function mostrarPopupAlerta(alerta) {
   }, 8000);
 }
 
+// ═══════════════════════════════════════════
+// DOSIFICACIONES DE HOY (Dashboard)
+// ═══════════════════════════════════════════
+
+async function actualizarDosificacionesHoy() {
+  try {
+    const res = await authFetch('/api/dosing');
+    const data = await res.json();
+    if (!data.ok) return;
+
+    // Filtrar solo las de hoy
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+
+    const eventosHoy = data.eventos.filter(e => new Date(e.createdAt) >= hoy);
+
+    const conteo = { acido: 0, base: 0, cloro: 0 };
+    eventosHoy.forEach(e => {
+      if (conteo[e.tipo] !== undefined) conteo[e.tipo]++;
+    });
+
+    const total = eventosHoy.length;
+
+    // Actualizar subtítulo
+    const subtitle = document.getElementById('dosificaciones-subtitle');
+    if (subtitle) {
+      subtitle.textContent = total === 0
+        ? 'Sin dosificaciones registradas hoy'
+        : `${total} dosificación${total > 1 ? 'es' : ''} en total`;
+    }
+
+    // Calcular máximo para las barras
+    const maxConteo = Math.max(conteo.acido, conteo.base, conteo.cloro, 1);
+
+    // Actualizar cada uno
+    actualizarItemDosis('acido', conteo.acido, maxConteo);
+    actualizarItemDosis('base', conteo.base, maxConteo);
+    actualizarItemDosis('cloro', conteo.cloro, maxConteo);
+  } catch (err) {
+    console.error('Error en actualizarDosificacionesHoy:', err);
+  }
+}
+
+function actualizarItemDosis(tipo, cantidad, maxConteo) {
+  const countEl = document.getElementById(`dosis-${tipo}-count`);
+  const labelEl = document.getElementById(`dosis-${tipo}-label`);
+  const barEl = document.getElementById(`dosis-${tipo}-bar`);
+
+  if (countEl) countEl.textContent = cantidad;
+  if (labelEl) labelEl.textContent = cantidad === 1 ? 'vez' : 'veces';
+  if (barEl) {
+    const pct = (cantidad / maxConteo) * 100;
+    barEl.style.width = pct + '%';
+  }
+}
+
 // ── Actividad reciente (dashboard) ──
 async function buildActividadReciente() {
   const cont = document.getElementById('actividad-reciente');
@@ -1350,6 +1476,7 @@ function startLiveData() {
   if (liveInterval) clearInterval(liveInterval);
   if (statusInterval) clearInterval(statusInterval);
   if (alertInterval) clearInterval(alertInterval);
+  if (chartInterval) clearInterval(chartInterval);
 
   liveInterval = setInterval(loadLatestMeasurement, 5000);
 
@@ -1365,7 +1492,105 @@ function startLiveData() {
     } catch { /* silencio */ }
   }, 30000);
 
-  alertInterval = setInterval(buildAlertas, 30000);
+  alertInterval = setInterval(() => {
+    buildAlertas();
+    actualizarDosificacionesHoy();      // ⚡ NUEVO
+  }, 30000);
+
+    chartInterval = setInterval(dibujarGraficoPH24h, 60000);
+}
+
+// ═══════════════════════════════════════════
+// ESTADO DEL SISTEMA (encendido/apagado)
+// ═══════════════════════════════════════════
+
+async function cargarEstadoSistema() {
+  try {
+    const res = await authFetch('/api/status');
+    const data = await res.json();
+    if (data.ok) {
+      sistemaActivo = data.activo;
+      actualizarUISistema();
+    }
+  } catch (err) {
+    console.error('Error cargando estado del sistema:', err);
+  }
+}
+
+async function toggleSistema() {
+  const btn = document.getElementById('btn-toggle-system');
+  if (btn) btn.disabled = true;
+
+  const nuevoEstado = !sistemaActivo;
+
+  try {
+    const res = await authFetch('/api/status', {
+      method: 'PUT',
+      body: JSON.stringify({ activo: nuevoEstado }),
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      sistemaActivo = data.activo;
+      actualizarUISistema();
+      mostrarNotificacion(
+        sistemaActivo
+          ? '▶️ Sistema encendido — el ESP32 vuelve a medir'
+          : '⏸️ Sistema apagado — el ESP32 dejó de medir',
+        'ok'
+      );
+    } else {
+      mostrarNotificacion(`❌ ${data.error}`, 'alert');
+    }
+  } catch {
+    mostrarNotificacion('❌ Error de conexión', 'alert');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function actualizarUISistema() {
+  const btn = document.getElementById('btn-toggle-system');
+  const text = document.getElementById('btn-toggle-system-text');
+  const aviso = document.getElementById('modo-aviso');
+
+  if (!btn || !text) return;
+
+  if (sistemaActivo) {
+    btn.classList.remove('suspended');
+    btn.classList.add('active');
+    text.textContent = 'Apagar sistema';
+    btn.title = 'Clic para apagar el sistema completo';
+  } else {
+    btn.classList.remove('active');
+    btn.classList.add('suspended');
+    text.textContent = 'Encender sistema';
+    btn.title = 'Clic para encender el sistema';
+  }
+
+  // Deshabilitar botones de dosificación si está apagado
+  document.querySelectorAll('.dosage-btn, .btn-dosificar-acido, .btn-dosificar-base, .ia-execute-btn, .alert-execute-btn').forEach(el => {
+    if (sistemaActivo) {
+      el.disabled = false;
+      el.style.opacity = '1';
+      el.style.cursor = 'pointer';
+    } else {
+      el.disabled = true;
+      el.style.opacity = '0.4';
+      el.style.cursor = 'not-allowed';
+    }
+  });
+
+  // Mostrar aviso si está apagado
+  if (aviso && !sistemaActivo) {
+    aviso.style.display = 'block';
+    aviso.style.background = 'rgba(255,77,109,0.08)';
+    aviso.style.border = '1px solid rgba(255,77,109,0.25)';
+    aviso.style.color = 'var(--red-alert)';
+    aviso.innerHTML = '⏸️ <strong>Sistema apagado:</strong> el ESP32 dejó de medir y publicar. Apretá "Encender sistema" en el menú lateral para reactivarlo.';
+  }
+
+  refreshIcons();
 }
 
 // ── Enter key en login/register ──

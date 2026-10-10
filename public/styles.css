@@ -1559,3 +1559,56 @@ button.btn-refresh svg {
   stroke: currentColor !important;
   flex-shrink: 0 !important;
 }
+
+/* ═══════════════════════════════════════════ */
+/* BOTÓN DE APAGAR/ENCENDER SISTEMA            */
+/* ═══════════════════════════════════════════ */
+
+.btn-toggle-system {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s;
+  margin-bottom: 8px;
+}
+
+.btn-toggle-system.active {
+  background: rgba(34, 211, 163, 0.1);
+  border: 1px solid rgba(34, 211, 163, 0.3);
+  color: var(--green-ok);
+}
+
+.btn-toggle-system.active:hover {
+  background: rgba(34, 211, 163, 0.2);
+  border-color: rgba(34, 211, 163, 0.5);
+}
+
+.btn-toggle-system.suspended {
+  background: rgba(255, 77, 109, 0.1);
+  border: 1px solid rgba(255, 77, 109, 0.3);
+  color: var(--red-alert);
+  animation: pulse-suspended 2s ease-in-out infinite;
+}
+
+.btn-toggle-system.suspended:hover {
+  background: rgba(255, 77, 109, 0.2);
+  border-color: rgba(255, 77, 109, 0.5);
+}
+
+@keyframes pulse-suspended {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 77, 109, 0.3); }
+  50% { box-shadow: 0 0 0 6px rgba(255, 77, 109, 0); }
+}
+
+.btn-toggle-system:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}

@@ -136,9 +136,20 @@ async function evaluarYdosificar(userId, medicion, pool, modo = 'automatico') {
 
 async function procesarMedicion({ ph, temperatura, esp32Id, origen }) {
   const userId = process.env.DEVICE_OWNER_ID;
+
+  // ⚡ Verificar estado del usuario ANTES de procesar
+  const user = await User.findById(userId).select('modo activo');
+  const modo = user?.modo || 'automatico';
+  const activo = user?.activo !== false;
+
+  // Si está apagado, descartar la medición
+  if (!activo) {
+    console.log(`⏸️  Sistema APAGADO: medición descartada (ph=${ph}, temp=${temperatura})`);
+    return { medicion: null, accion: null, duplicada: false, modo, activo: false };
+  }
+
   const cloro = simularCloro(temperatura);
 
-  // Deduplicación
   if (esp32Id) {
     const existente = await Measurement.findOne({ esp32Id, userId });
     if (existente) {
@@ -147,24 +158,13 @@ async function procesarMedicion({ ph, temperatura, esp32Id, origen }) {
     }
   }
 
-  // Guardar medición (SIEMPRE, en ambos modos)
   const medicion = await Measurement.create({
-    userId,
-    ph,
-    cloro,
-    temperatura,
-    origen,
-    esp32Id,
+    userId, ph, cloro, temperatura, origen, esp32Id,
   });
-
-  // Leer modo del usuario
-  const user = await User.findById(userId).select('modo');
-  const modo = user?.modo || 'automatico';
 
   const pool = await Pool.findOne({ userId });
   const accion = await evaluarYdosificar(userId, medicion, pool, modo);
 
-  // Publicar comando MQTT solo si estamos en AUTOMÁTICO
   if (accion && modo === 'automatico' && mqttClient && mqttClient.connected) {
     const topicComandos = `${process.env.MQTT_TOPIC_BASE}/comandos`;
     const comando = {
@@ -182,10 +182,9 @@ async function procesarMedicion({ ph, temperatura, esp32Id, origen }) {
     console.log(`🔧 Modo MANUAL: dosificación registrada pero NO ejecutada automáticamente`);
   }
 
-  // Evaluar alertas (SIEMPRE, en ambos modos)
   await evaluarAlertas(userId, medicion);
 
-  return { medicion, accion, duplicada: false, modo };
+  return { medicion, accion, duplicada: false, modo, activo: true };
 }
 
 // ═══════════════════════════════════════════
@@ -346,6 +345,14 @@ app.get('/api/ia/monthly-report', verificarToken, async (req, res) => {
 
 app.post('/api/ia/recommendations/execute', verificarToken, async (req, res) => {
   try {
+     const user = await User.findById(req.userId).select('activo');
+    if (user && user.activo === false) {
+      return res.status(403).json({ 
+        ok: false, 
+        error: 'El sistema está apagado. Encendelo para dosificar.' 
+      });
+    }
+    
     const { tipo, cantidad, unidad, motivo } = req.body;
     const userId = req.userId;
 
@@ -546,6 +553,14 @@ app.get('/api/dosing', verificarToken, async (req, res) => {
 
 app.post('/api/dosing', verificarToken, async (req, res) => {
   try {
+     const user = await User.findById(req.userId).select('activo');
+    if (user && user.activo === false) {
+      return res.status(403).json({ 
+        ok: false, 
+        error: 'El sistema está apagado. Encendelo para dosificar.' 
+      });
+    }
+
     const { tipo, modo } = req.body;
     const userId = req.userId;
 
@@ -658,6 +673,46 @@ app.put('/api/mode', verificarToken, async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════
+// RUTAS DE ESTADO DEL SISTEMA (activo/apagado)
+// ═══════════════════════════════════════════
+
+app.get('/api/status', verificarToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).select('activo');
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
+    res.json({ ok: true, activo: user.activo !== false });
+  } catch (err) {
+    res.status(500).json({ error: 'Error del servidor.' });
+  }
+});
+
+app.put('/api/status', verificarToken, async (req, res) => {
+  try {
+    const { activo } = req.body;
+    if (typeof activo !== 'boolean') {
+      return res.status(400).json({ error: 'Valor inválido.' });
+    }
+    const user = await User.findByIdAndUpdate(req.userId, { activo }, { new: true }).select('activo');
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
+
+    // ⚡ Publicar comando MQTT al ESP32
+    if (mqttClient && mqttClient.connected) {
+      const topicComandos = `${process.env.MQTT_TOPIC_BASE}/comandos`;
+      const comando = {
+        accion: activo ? 'reanudar' : 'pausar',
+        ts: Date.now(),
+      };
+      mqttClient.publish(topicComandos, JSON.stringify(comando));
+      console.log(`📤 Comando ${activo ? 'reanudar' : 'pausar'} enviado al ESP32`);
+    }
+
+    console.log(`⏯️  Sistema ${activo ? 'ACTIVADO' : 'APAGADO'}`);
+    res.json({ ok: true, activo: user.activo });
+  } catch (err) {
+    res.status(500).json({ error: 'Error del servidor.' });
+  }
+});
 // ═══════════════════════════════════════════
 // RUTAS DEL ESP32 (HTTP - respaldo)
 // ═══════════════════════════════════════════
