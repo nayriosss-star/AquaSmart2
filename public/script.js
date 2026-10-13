@@ -481,21 +481,28 @@ async function actualizarDosificacionRecomendada() {
 
   let volumen = 0;
   let phActual = null;
+  let ultimaDosisCloro = null;
 
   try {
-    const [resPool, resMed] = await Promise.all([
+    const [resPool, resMed, resDosing] = await Promise.all([
       authFetch('/api/pool'),
       authFetch('/api/measurements/latest'),
+      authFetch('/api/dosing'),
     ]);
 
     const dataPool = await resPool.json();
     const dataMed = await resMed.json();
+    const dataDosing = await resDosing.json();
 
     if (dataPool.ok && dataPool.pool) {
       volumen = dataPool.pool.volumen || (dataPool.pool.largo * dataPool.pool.ancho * dataPool.pool.profundidad) || 0;
     }
     if (dataMed.ok && dataMed.measurement) {
       phActual = dataMed.measurement.ph;
+    }
+    if (dataDosing.ok && dataDosing.eventos) {
+      // Buscar la última dosificación de cloro
+      ultimaDosisCloro = dataDosing.eventos.find(e => e.tipo === 'cloro') || null;
     }
   } catch (err) {
     console.error('Error obteniendo datos:', err);
@@ -523,6 +530,7 @@ async function actualizarDosificacionRecomendada() {
     subtitle.textContent = `Basada en el volumen actual (${volumen} m³) y el último pH medido (${phActual.toFixed(2)})`;
   }
 
+  // ── Calcular ácido y base (según pH) ──
   let acidoCantidad = 0;
   let baseCantidad = 0;
   let estadoPH = 'ok';
@@ -547,12 +555,47 @@ async function actualizarDosificacionRecomendada() {
     bajo: `⚠ pH por debajo del rango — se recomienda dosificar base`,
   }[estadoPH];
 
+  // ── Calcular cloro (según volumen y última dosificación) ──
+  const cloroCantidad = Math.round(volumen * 1.5);
+
+  let horasDesdeCloro = null;
+  let textoUltimaCloro = 'Nunca';
+  let textoProximaCloro = 'Se recomienda dosificar ahora';
+  let estadoCloro = 'recomendado'; // 'recomendado' | 'esperar' | 'ok'
+
+  if (ultimaDosisCloro) {
+    horasDesdeCloro = (Date.now() - new Date(ultimaDosisCloro.createdAt).getTime()) / (60 * 60 * 1000);
+    textoUltimaCloro = tiempoRelativo(new Date(ultimaDosisCloro.createdAt));
+
+    if (horasDesdeCloro >= 24) {
+      textoProximaCloro = 'Se recomienda dosificar ahora';
+      estadoCloro = 'recomendado';
+    } else {
+      const horasRestantes = 24 - horasDesdeCloro;
+      if (horasRestantes < 1) {
+        textoProximaCloro = 'Próxima en menos de 1 hora';
+      } else {
+        textoProximaCloro = `Próxima en ${Math.round(horasRestantes)} horas`;
+      }
+      estadoCloro = horasRestantes < 12 ? 'ok' : 'esperar';
+    }
+  }
+
+  const colorCloro = {
+    recomendado: 'var(--yellow-warn)',
+    esperar: 'var(--aqua)',
+    ok: 'var(--text-secondary)',
+  }[estadoCloro];
+
+  const opacidadCloro = estadoCloro === 'ok' ? '0.65' : '1';
+
+  // ── Render ──
   cont.innerHTML = `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;padding:10px 14px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);font-size:13px;color:${colorEstado};font-weight:500;">
       ${mensajeEstado}
     </div>
 
-    <div class="dosage-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <div class="dosage-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
       <div class="dosage-item" style="opacity:${acidoCantidad > 0 ? '1' : '0.45'};">
         <div class="dosage-name">ÁCIDO MURIÁTICO (para bajar pH)</div>
         <div class="dosage-val" style="color:${acidoCantidad > 0 ? 'var(--red-alert)' : 'var(--text-secondary)'};">
@@ -576,9 +619,20 @@ async function actualizarDosificacionRecomendada() {
             : 'pH actual en rango — sin necesidad'}
         </div>
       </div>
+
+      <div class="dosage-item" style="opacity:${opacidadCloro};">
+        <div class="dosage-name">CLORO (dosificación diaria)</div>
+        <div class="dosage-val" style="color:${colorCloro};">
+          ${cloroCantidad} <span class="dosage-unit">g</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">
+          Última: ${textoUltimaCloro}<br>
+          ${textoProximaCloro}
+        </div>
+      </div>
     </div>
 
-    ${(acidoCantidad > 0 || baseCantidad > 0) ? `
+    ${(acidoCantidad > 0 || baseCantidad > 0 || estadoCloro === 'recomendado' || estadoCloro === 'esperar') ? `
       <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;">
         ${acidoCantidad > 0 ? `
           <button class="btn-dosificar-acido" onclick="dosificarDesdeRecomendacion('ph_bajar', ${acidoCantidad}, 'ml')">
@@ -592,12 +646,20 @@ async function actualizarDosificacionRecomendada() {
             <span>Dosificar ${baseCantidad} g de base</span>
           </button>
         ` : ''}
+        ${(estadoCloro === 'recomendado' || estadoCloro === 'esperar') ? `
+          <button class="btn-dosificar-cloro" onclick="dosificarCloroDesdeRecomendacion(${cloroCantidad}, ${horasDesdeCloro !== null ? Math.round(24 - horasDesdeCloro) : 0})">
+            <i data-lucide="droplets" style="width:16px;height:16px;"></i>
+            <span>Dosificar ${cloroCantidad} g de cloro</span>
+          </button>
+        ` : ''}
       </div>
     ` : ''}
   `;
 
   refreshIcons();
 }
+
+
 
 async function dosificarDesdeRecomendacion(tipo, cantidad, unidad) {
   if (!confirm(`¿Ejecutar dosificación de ${cantidad} ${unidad} (${tipo === 'ph_bajar' ? 'ácido' : 'base'})?`)) return;
@@ -725,6 +787,49 @@ function actualizarEstadoESP32(ultimaMedicionFecha) {
   if (subtitle) {
     const hace = tiempoRelativo(ultimaMedicionFecha);
     subtitle.textContent = `Monitoreo en tiempo real · Última actualización: ${hace}`;
+  }
+}
+
+async function dosificarCloroDesdeRecomendacion(cantidad, horasRestantes) {
+  // Validación: si faltan horas, preguntar
+  if (horasRestantes > 0) {
+    const confirmacion = confirm(
+      `Todavía no le toca al cloro.\n\n` +
+      `Faltan aproximadamente ${horasRestantes} horas para la próxima dosificación automática.\n\n` +
+      `¿Seguro querés dosificar ${cantidad} g de cloro ahora?`
+    );
+    if (!confirmacion) return;
+  } else {
+    if (!confirm(`¿Ejecutar dosificación de ${cantidad} g de cloro?`)) return;
+  }
+
+  try {
+    const res = await authFetch('/api/ia/recommendations/execute', {
+      method: 'POST',
+      body: JSON.stringify({
+        tipo: 'cloro',
+        cantidad,
+        unidad: 'g',
+        motivo: 'Dosificación de cloro desde sección Mi Piscina',
+      }),
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      mostrarNotificacion('✅ Cloro dosificado correctamente', 'ok');
+      // Refrescar todo
+      await Promise.all([
+        actualizarDosificacionRecomendada(),
+        loadHistorial(),
+        buildAlertas(),
+        actualizarDosificacionesHoy(),
+      ]);
+    } else {
+      mostrarNotificacion(`❌ ${data.error}`, 'alert');
+    }
+  } catch (err) {
+    console.error('Error en dosificarCloroDesdeRecomendacion:', err);
+    mostrarNotificacion('❌ Error de conexión', 'alert');
   }
 }
 

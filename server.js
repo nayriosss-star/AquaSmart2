@@ -84,6 +84,12 @@ function simularCloro(temperatura) {
   return +Math.max(0, base + efectoTemp + ruido).toFixed(2);
 }
 
+const HORA_DOSIFICACION_CLORO = 20;      // 20:00 hs (hora local Argentina)
+const ZONA_HORARIA = 'America/Argentina/Buenos_Aires';
+const HORAS_MINIMAS_ENTRE_CLORO = 24;    // 24 horas
+const CLORO_GR_POR_M3 = 1.5;             // 1.5 g por m³
+
+
 async function evaluarYdosificar(userId, medicion, pool, modo = 'automatico') {
   const { ph } = medicion;
   const volumen = pool ? pool.volumen : 10;
@@ -128,6 +134,110 @@ async function evaluarYdosificar(userId, medicion, pool, modo = 'automatico') {
     motivo: evento.motivo,
     eventId: evento._id,
   };
+}
+
+// ═══════════════════════════════════════════
+// DOSIFICACIÓN AUTOMÁTICA DE CLORO (cada 24hs a las 20:00)
+// ═══════════════════════════════════════════
+
+async function verificarDosificacionCloro() {
+  try {
+    const userId = process.env.DEVICE_OWNER_ID;
+    if (!userId) return;
+
+    // 1. Obtener estado del usuario
+    const user = await User.findById(userId).select('modo activo');
+    if (!user) return;
+
+    const modo = user.modo || 'automatico';
+    const activo = user.activo !== false;
+
+    // 2. Si el sistema está apagado o en modo manual → no dosificar
+    if (!activo) {
+      return;
+    }
+    if (modo !== 'automatico') {
+      return;
+    }
+
+    // 3. Verificar la hora local (Argentina)
+    const ahora = new Date();
+    const horaLocal = new Date(ahora.toLocaleString('en-US', { timeZone: ZONA_HORARIA }));
+    const hora = horaLocal.getHours();
+
+    // Solo ejecutar si ya pasaron las 20:00
+    if (hora < HORA_DOSIFICACION_CLORO) {
+      return;
+    }
+
+    // 4. Buscar la última dosificación de cloro
+    const ultimaCloro = await DosingEvent.findOne({
+      userId,
+      tipo: 'cloro',
+    }).sort({ createdAt: -1 });
+
+    // 5. Verificar que hayan pasado >= 24hs
+    if (ultimaCloro) {
+      const horasDesdeUltima = (Date.now() - new Date(ultimaCloro.createdAt).getTime()) / (60 * 60 * 1000);
+      if (horasDesdeUltima < HORAS_MINIMAS_ENTRE_CLORO) {
+        console.log(`⏸️  Cloro automático saltado: hace solo ${horasDesdeUltima.toFixed(1)}hs (mínimo ${HORAS_MINIMAS_ENTRE_CLORO}hs)`);
+        return;
+      }
+    }
+
+    // 6. ¿Ya se dosificó HOY después de las 20:00?
+    //    Evita que si el server corre cada 30min, dosifique varias veces la misma noche
+    const hoy20hs = new Date(horaLocal);
+    hoy20hs.setHours(HORA_DOSIFICACION_CLORO, 0, 0, 0);
+
+    const dosificadoHoy = await DosingEvent.findOne({
+      userId,
+      tipo: 'cloro',
+      createdAt: { $gte: hoy20hs },
+    });
+
+    if (dosificadoHoy) {
+      console.log('⏸️  Cloro automático saltado: ya se dosificó hoy después de las 20:00');
+      return;
+    }
+
+    // 7. Calcular cantidad según volumen de la piscina
+    const pool = await Pool.findOne({ userId });
+    const volumen = pool ? pool.volumen : 10;
+    const cantidad = Math.round(volumen * CLORO_GR_POR_M3);
+
+    // 8. Crear el evento de dosificación
+    const evento = await DosingEvent.create({
+      userId,
+      tipo: 'cloro',
+      cantidad,
+      unidad: 'g',
+      motivo: `Dosificación automática diaria de cloro (20:00 hs) — piscina de ${volumen} m³`,
+      modo: 'automatico',
+      origen: 'automatico_esp32',
+      ejecutado: false,
+    });
+
+    // 9. Publicar comando MQTT al ESP32
+    if (mqttClient && mqttClient.connected) {
+      const topicComandos = `${process.env.MQTT_TOPIC_BASE}/comandos`;
+      const comando = {
+        accion: 'dosificar',
+        tipo: 'cloro',
+        cantidad,
+        unidad: 'g',
+        eventId: evento._id.toString(),
+        modo: 'automatico',
+        ts: Date.now(),
+      };
+      mqttClient.publish(topicComandos, JSON.stringify(comando));
+      console.log(`🤖 Cloro AUTOMÁTICO publicado: ${cantidad}g (piscina ${volumen} m³)`);
+    } else {
+      console.warn('⚠️  No se pudo publicar el comando de cloro: MQTT desconectado');
+    }
+  } catch (err) {
+    console.error('❌ Error en verificarDosificacionCloro:', err.message);
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -673,6 +783,7 @@ app.put('/api/mode', verificarToken, async (req, res) => {
   }
 });
 
+
 // ═══════════════════════════════════════════
 // RUTAS DE ESTADO DEL SISTEMA (activo/apagado)
 // ═══════════════════════════════════════════
@@ -713,6 +824,7 @@ app.put('/api/status', verificarToken, async (req, res) => {
     res.status(500).json({ error: 'Error del servidor.' });
   }
 });
+
 // ═══════════════════════════════════════════
 // RUTAS DEL ESP32 (HTTP - respaldo)
 // ═══════════════════════════════════════════
@@ -814,3 +926,18 @@ setInterval(async () => {
     await chequearESP32Inactivo(userId);
   }
 }, 2 * 60 * 1000);
+
+// ═══════════════════════════════════════════
+// DOSIFICACIÓN AUTOMÁTICA DE CLORO
+// Chequea cada 30 minutos si hay que dosificar
+// ═══════════════════════════════════════════
+
+// Ejecutar una vez al arrancar (por si arranca después de las 20:00)
+setTimeout(() => {
+  verificarDosificacionCloro();
+}, 10000); // espera 10 segundos para que MQTT conecte
+
+// Después, cada 30 minutos
+setInterval(async () => {
+  await verificarDosificacionCloro();
+}, 30 * 60 * 1000); // 30 minutos
