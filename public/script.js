@@ -232,6 +232,7 @@ async function launchApp(user) {
     cargarReporteMensual(),
     cargarModo(),
     cargarEstadoSistema(),
+    cargarReporteIA(), 
   ]);
   refreshIcons();
   startLiveData();
@@ -254,6 +255,7 @@ function showSection(s, element) {
   if (s === 'ia') {
     cargarRecomendaciones();
     cargarReporteMensual();
+    cargarReporteIA();
   }
   if (s === 'piscina') actualizarDosificacionRecomendada();
 
@@ -1706,3 +1708,81 @@ document.addEventListener('keydown', e => {
   if (loginVisible) doLogin();
   else if (registerVisible) doRegister();
 });
+
+// ═══════════════════════════════════════════
+// REPORTE IA (números del mes)
+// ═══════════════════════════════════════════
+
+async function cargarReporteIA() {
+  try {
+    // 1. Obtener mediciones del mes (últimos 30 días)
+    const resMed = await authFetch('/api/measurements?horas=720');
+    const dataMed = await resMed.json();
+
+    // 2. Obtener dosificaciones del mes
+    const resDosif = await authFetch('/api/ia/monthly-report');
+    const dataDosif = await resDosif.json();
+
+    const mesEl = document.getElementById('ia-mes-actual');
+    if (mesEl) {
+      const ahora = new Date();
+      const mes = ahora.toLocaleString('es-AR', { month: 'long', year: 'numeric' });
+      mesEl.textContent = mes.charAt(0).toUpperCase() + mes.slice(1);
+    }
+
+    if (dataMed.ok && dataMed.mediciones && dataMed.mediciones.length > 0) {
+      const mediciones = dataMed.mediciones;
+
+      // pH promedio
+      const phs = mediciones.map(m => m.ph).filter(v => typeof v === 'number');
+      const phProm = phs.length > 0 ? phs.reduce((a, b) => a + b, 0) / phs.length : 0;
+      const phEl = document.getElementById('ia-ph-prom');
+      const phStatusEl = document.getElementById('ia-ph-status');
+      if (phEl) phEl.textContent = phProm.toFixed(2);
+      if (phStatusEl) {
+        if (phProm >= 6.8 && phProm <= 7.6) { phStatusEl.innerHTML = '<i data-lucide="check-circle" style="width:12px;height:12px;"></i> Dentro del rango óptimo'; phStatusEl.className = 'metric-status ok'; } 
+        else if (phProm < 6.8) { phStatusEl.innerHTML = '<i data-lucide="trending-down" style="width:12px;height:12px;"></i> Por debajo del rango'; phStatusEl.className = 'metric-status warn'; } 
+        else { phStatusEl.innerHTML = '<i data-lucide="trending-up" style="width:12px;height:12px;"></i> Por encima del rango'; phStatusEl.className = 'metric-status warn'; }
+      }
+
+      // Temperatura promedio
+      const temps = mediciones.map(m => m.temperatura).filter(v => typeof v === 'number');
+      const tempProm = temps.length > 0 ? temps.reduce((a, b) => a + b, 0) / temps.length : 0;
+      const tempEl = document.getElementById('ia-temp-prom');
+      const tempStatusEl = document.getElementById('ia-temp-status');
+      if (tempEl) tempEl.innerHTML = `${tempProm.toFixed(1)}<span class="metric-unit">°C</span>`;
+      if (tempStatusEl) {
+        if (tempProm >= 22 && tempProm <= 28) { tempStatusEl.innerHTML = '<i data-lucide="check-circle" style="width:12px;height:12px;"></i> Confortable'; tempStatusEl.className = 'metric-status ok'; } 
+        else { tempStatusEl.innerHTML = '<i data-lucide="thermometer" style="width:12px;height:12px;"></i> Fuera de rango'; tempStatusEl.className = 'metric-status warn'; }
+      }
+
+      // Cloro promedio
+      const cloros = mediciones.map(m => m.cloro).filter(v => typeof v === 'number');
+      const cloroProm = cloros.length > 0 ? cloros.reduce((a, b) => a + b, 0) / cloros.length : 0;
+      const cloroEl = document.getElementById('ia-cloro-prom');
+      const cloroStatusEl = document.getElementById('ia-cloro-status');
+      if (cloroEl) cloroEl.innerHTML = `${cloroProm.toFixed(1)}<span class="metric-unit"> ppm</span>`;
+      if (cloroStatusEl) {
+        if (cloroProm >= 1.0 && cloroProm <= 3.0) { cloroStatusEl.innerHTML = '<i data-lucide="check-circle" style="width:12px;height:12px;"></i> Nivel adecuado'; cloroStatusEl.className = 'metric-status ok'; } 
+        else if (cloroProm < 1.0) { cloroStatusEl.innerHTML = '<i data-lucide="alert-triangle" style="width:12px;height:12px;"></i> Ligeramente bajo'; cloroStatusEl.className = 'metric-status warn'; } 
+        else { cloroStatusEl.innerHTML = '<i data-lucide="alert-triangle" style="width:12px;height:12px;"></i> Un poco alto'; cloroStatusEl.className = 'metric-status warn'; }
+      }
+    }
+
+    if (dataDosif.ok) {
+      const totalEl = document.getElementById('ia-dosif-total');
+      const detalleEl = document.getElementById('ia-dosif-detalle');
+      if (totalEl) totalEl.textContent = dataDosif.totalEventos;
+      if (detalleEl) {
+        const acidos = dataDosif.totales.acido || 0;
+        const bases = dataDosif.totales.base || 0;
+        const cloros = dataDosif.totales.cloro || 0;
+        detalleEl.textContent = `${Math.round(acidos)} ml ácido · ${Math.round(bases)} g base · ${Math.round(cloros)} g cloro`;
+      }
+    }
+
+    refreshIcons();
+  } catch (err) {
+    console.error('Error en cargarReporteIA:', err);
+  }
+}
