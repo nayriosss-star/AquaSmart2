@@ -404,6 +404,7 @@
       <!-- ═══ IA & REPORTES ═══ -->
       <section id="section-ia" style="display:none;">
 
+        <!-- Recomendaciones IA -->
         <div class="chart-card" style="margin-bottom:24px;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
             <div>
@@ -418,6 +419,7 @@
           <div id="recomendaciones-list" style="margin-top:16px;"></div>
         </div>
 
+        <!-- Gráfico mensual de dosificaciones -->
         <div class="chart-card" style="margin-bottom:24px;">
           <div class="chart-title">Dosificaciones del mes</div>
           <div class="chart-subtitle" id="mes-actual">Cargando...</div>
@@ -451,6 +453,36 @@
           </div>
         </div>
 
+        <!-- ⚡ NUEVO: Reporte IA (Tarjetas dinámicas) -->
+        <div class="chart-card" style="margin-bottom:24px;">
+          <div class="chart-title">Reporte mensual IA</div>
+          <div class="chart-subtitle">Datos reales de los últimos 30 días (<span id="ia-mes-actual">...</span>)</div>
+          
+          <div class="cards-grid" style="margin-top:20px;">
+            <div class="metric-card ok">
+              <div class="metric-label">pH promedio mensual</div>
+              <div class="metric-value" id="ia-ph-prom">—</div>
+              <div class="metric-status" id="ia-ph-status">Cargando...</div>
+            </div>
+            <div class="metric-card info">
+              <div class="metric-label">Dosificaciones totales</div>
+              <div class="metric-value" id="ia-dosif-total">—</div>
+              <div class="metric-status" id="ia-dosif-detalle" style="color:var(--text-secondary);">Cargando...</div>
+            </div>
+            <div class="metric-card warn">
+              <div class="metric-label">Cloro estimado prom.</div>
+              <div class="metric-value" id="ia-cloro-prom">—</div>
+              <div class="metric-status" id="ia-cloro-status">Cargando...</div>
+            </div>
+            <div class="metric-card ok">
+              <div class="metric-label">Temp. promedio</div>
+              <div class="metric-value" id="ia-temp-prom">—</div>
+              <div class="metric-status" id="ia-temp-status">Cargando...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resumen del mes -->
         <div class="chart-card">
           <div class="chart-title">Resumen del mes</div>
           <div class="chart-subtitle">Estadísticas generales</div>
