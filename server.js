@@ -30,6 +30,7 @@ if (faltantes.length) {
 }
 
 const app = express();
+app.set('trust proxy', 1);
 
 // ── Seguridad base ──
 app.use(helmet({
