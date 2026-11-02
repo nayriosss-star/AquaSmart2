@@ -778,12 +778,24 @@ app.put('/api/mode', verificarToken, async (req, res) => {
     const user = await User.findByIdAndUpdate(req.userId, { modo }, { new: true }).select('modo');
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
     console.log(`🔧 Modo cambiado a: ${modo}`);
+
+    // ⚡ NUEVO: Avisarle al ESP32 por MQTT que cambió el modo
+    if (mqttClient && mqttClient.connected) {
+      const topicComandos = `${process.env.MQTT_TOPIC_BASE}/comandos`;
+      const comando = {
+        accion: 'cambiar_modo',
+        modo: modo,
+        ts: Date.now(),
+      };
+      mqttClient.publish(topicComandos, JSON.stringify(comando));
+      console.log(`📤 Avisando al ESP32: modo ${modo}`);
+    }
+
     res.json({ ok: true, modo: user.modo });
   } catch (err) {
     res.status(500).json({ error: 'Error del servidor.' });
   }
 });
-
 
 // ═══════════════════════════════════════════
 // RUTAS DE ESTADO DEL SISTEMA (activo/apagado)
