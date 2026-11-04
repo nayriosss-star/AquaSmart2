@@ -95,28 +95,40 @@ async function evaluarYdosificar(userId, medicion, pool, modo = 'automatico') {
   const { ph } = medicion;
   const volumen = pool ? pool.volumen : 10;
 
-  const reciente = await DosingEvent.findOne({
-    userId,
-    createdAt: { $gte: new Date(Date.now() - 15 * 60 * 1000) },
-  });
-  if (reciente) return null;
-
+  // 1. Evaluar si el pH está fuera del rango óptimo (7.2 a 7.6)
   let tipo = null, cantidad = 0, unidad = 'ml', motivo = '';
 
   if (ph > 7.6) {
     tipo = 'acido';
     unidad = 'ml';
     cantidad = Math.round((ph - 7.2) * volumen * 8);
-    motivo = `pH ${ph} detectado — por encima del rango óptimo (6.8–7.6)`;
-  } else if (ph < 6.8) {
+    motivo = `pH ${ph} detectado — por encima del rango óptimo (7.2–7.6)`;
+  } else if (ph < 7.2) {
     tipo = 'base';
     unidad = 'g';
     cantidad = Math.round((7.2 - ph) * volumen * 12);
-    motivo = `pH ${ph} detectado — por debajo del rango óptimo (6.8–7.6)`;
+    motivo = `pH ${ph} detectado — por debajo del rango óptimo (7.2–7.6)`;
   }
 
-  if (!tipo) return null;
+  // Si el pH está en rango, no dosificar
+  if (!tipo) {
+    console.log(`✅ pH ${ph} en rango óptimo. No se dosifica.`);
+    return null;
+  }
 
+  // 2. Verificar si ya se dosificó LO MISMO hace muy poco (para evitar doble dosis)
+  const reciente = await DosingEvent.findOne({
+    userId,
+    tipo: tipo, // Solo bloquea si es el mismo químico (ácido o base)
+    createdAt: { $gte: new Date(Date.now() - 5 * 60 * 1000) }, // Últimos 5 min
+  });
+
+  if (reciente) {
+    console.log(`⏸️ Dosificación de ${tipo} saltada: ya se dosificó hace menos de 5 min.`);
+    return null;
+  }
+
+  // 3. Crear el evento en la base de datos
   const evento = await DosingEvent.create({
     userId,
     measurementId: medicion._id,
@@ -127,6 +139,8 @@ async function evaluarYdosificar(userId, medicion, pool, modo = 'automatico') {
     modo,
     origen: modo === 'automatico' ? 'automatico_esp32' : 'manual_web',
   });
+
+  console.log(`🤖 Evento automático creado: ${tipo} ${cantidad}${unidad} (pH: ${ph})`);
 
   return {
     tipo: evento.tipo,
